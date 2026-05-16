@@ -515,7 +515,7 @@ export class Agent {
 
 			case "message_end":
 				this._state.streamingMessage = undefined;
-				this._state.messages.push(event.message);
+				this._state.messages = [...this._state.messages, event.message];
 				break;
 
 			case "tool_execution_start": {
@@ -540,6 +540,7 @@ export class Agent {
 
 			case "agent_end":
 				this._state.streamingMessage = undefined;
+				this._state.isStreaming = false;
 				break;
 		}
 

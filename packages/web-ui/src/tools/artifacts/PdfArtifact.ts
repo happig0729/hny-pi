@@ -8,10 +8,30 @@ import { ArtifactElement } from "./ArtifactElement.js";
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
 
+/** Check if a string looks like valid base64 (PDF binary data) */
+function isLikelyBase64(str: string): boolean {
+	const s = str.replace(/^data:.*?base64,/, "").trim();
+	// Base64: only A-Z, a-z, 0-9, +, /, =
+	return /^[A-Za-z0-9+/]*={0,2}$/.test(s) && s.length >= 50;
+}
+
+/** Check if content starts with PDF magic bytes (after base64 decode) */
+function isLikelyPdfData(content: string): boolean {
+	if (content.startsWith("%PDF-")) return true;
+	try {
+		const s = content.replace(/^data:.*?base64,/, "").trim();
+		const decoded = atob(s);
+		return decoded.startsWith("%PDF-");
+	} catch {
+		return false;
+	}
+}
+
 @customElement("pdf-artifact")
 export class PdfArtifact extends ArtifactElement {
 	@property({ type: String }) private _content = "";
 	@state() private error: string | null = null;
+	@state() private isTextContent = false;
 	private currentLoadingTask: any = null;
 
 	get content(): string {
@@ -21,6 +41,7 @@ export class PdfArtifact extends ArtifactElement {
 	set content(value: string) {
 		this._content = value;
 		this.error = null;
+		this.isTextContent = false;
 		this.requestUpdate();
 	}
 
@@ -46,34 +67,17 @@ export class PdfArtifact extends ArtifactElement {
 		}
 	}
 
-	private base64ToArrayBuffer(base64: string): ArrayBuffer {
-		// Remove data URL prefix if present
-		let base64Data = base64;
-		if (base64.startsWith("data:")) {
-			const base64Match = base64.match(/base64,(.+)/);
-			if (base64Match) {
-				base64Data = base64Match[1];
-			}
+	private base64Decode(value: string): string {
+		let s = value;
+		if (s.startsWith("data:")) {
+			const m = s.match(/base64,(.+)/);
+			if (m) s = m[1];
 		}
-
-		const binaryString = atob(base64Data);
-		const bytes = new Uint8Array(binaryString.length);
-		for (let i = 0; i < binaryString.length; i++) {
-			bytes[i] = binaryString.charCodeAt(i);
-		}
-		return bytes.buffer;
+		return atob(s.trim());
 	}
 
-	private decodeBase64(): Uint8Array {
-		let base64Data = this._content;
-		if (this._content.startsWith("data:")) {
-			const base64Match = this._content.match(/base64,(.+)/);
-			if (base64Match) {
-				base64Data = base64Match[1];
-			}
-		}
-
-		const binaryString = atob(base64Data);
+	private base64ToUint8Array(value: string): Uint8Array {
+		const binaryString = this.base64Decode(value);
 		const bytes = new Uint8Array(binaryString.length);
 		for (let i = 0; i < binaryString.length; i++) {
 			bytes[i] = binaryString.charCodeAt(i);
@@ -82,22 +86,29 @@ export class PdfArtifact extends ArtifactElement {
 	}
 
 	public getHeaderButtons() {
-		return html`
-			<div class="flex items-center gap-1">
-				${DownloadButton({
-					content: this.decodeBase64(),
-					filename: this.filename,
-					mimeType: "application/pdf",
-					title: i18n("Download"),
-				})}
-			</div>
-		`;
+		if (this.isTextContent || !isLikelyBase64(this._content)) {
+			return html`<div class="flex items-center gap-1"></div>`;
+		}
+		try {
+			return html`
+				<div class="flex items-center gap-1">
+					${DownloadButton({
+						content: this.base64ToUint8Array(this._content),
+						filename: this.filename,
+						mimeType: "application/pdf",
+						title: i18n("Download"),
+					})}
+				</div>
+			`;
+		} catch {
+			return html`<div class="flex items-center gap-1"></div>`;
+		}
 	}
 
 	override async updated(changedProperties: Map<string, any>) {
 		super.updated(changedProperties);
 
-		if (changedProperties.has("_content") && this._content && !this.error) {
+		if (changedProperties.has("_content") && this._content && !this.error && !this.isTextContent) {
 			await this.renderPdf();
 		}
 	}
@@ -109,25 +120,28 @@ export class PdfArtifact extends ArtifactElement {
 		let pdf: any = null;
 
 		try {
-			const arrayBuffer = this.base64ToArrayBuffer(this._content);
+			// If content is not base64 PDF data, show as text
+			if (!isLikelyBase64(this._content) && !isLikelyPdfData(this._content)) {
+				this.isTextContent = true;
+				this.requestUpdate();
+				return;
+			}
 
-			// Cancel any existing loading task
+			const data = this.base64ToUint8Array(this._content);
+
 			if (this.currentLoadingTask) {
 				this.currentLoadingTask.destroy();
 			}
 
-			// Load the PDF
-			this.currentLoadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+			this.currentLoadingTask = pdfjsLib.getDocument({ data });
 			pdf = await this.currentLoadingTask.promise;
 			this.currentLoadingTask = null;
 
-			// Clear container
 			container.innerHTML = "";
 			const wrapper = document.createElement("div");
 			wrapper.className = "p-4";
 			container.appendChild(wrapper);
 
-			// Render all pages
 			for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
 				const page = await pdf.getPage(pageNum);
 
@@ -166,7 +180,13 @@ export class PdfArtifact extends ArtifactElement {
 			}
 		} catch (error: any) {
 			console.error("Error rendering PDF:", error);
-			this.error = error?.message || i18n("Failed to load PDF");
+			// If PDF parse fails but content exists, show as text
+			if (this._content && !String(error).includes("atob")) {
+				this.isTextContent = true;
+				this.requestUpdate();
+			} else {
+				this.error = error?.message || i18n("Failed to load PDF");
+			}
 		} finally {
 			if (pdf) {
 				pdf.destroy();
@@ -182,6 +202,17 @@ export class PdfArtifact extends ArtifactElement {
 						<div class="font-medium mb-1">${i18n("Error loading PDF")}</div>
 						<div class="text-sm opacity-90">${this.error}</div>
 					</div>
+				</div>
+			`;
+		}
+
+		if (this.isTextContent) {
+			return html`
+				<div class="h-full flex flex-col bg-background overflow-auto">
+					<div class="bg-muted/50 border-b border-border px-4 py-2 text-sm text-muted-foreground">
+						内容为文本而非 PDF 二进制数据。如需生成 PDF，让 AI 用 JavaScript REPL 中的 jsPDF 库生成 PDF 并编码为 base64。
+					</div>
+					<pre class="flex-1 overflow-auto p-4 text-sm font-mono whitespace-pre-wrap break-words">${this._content}</pre>
 				</div>
 			`;
 		}

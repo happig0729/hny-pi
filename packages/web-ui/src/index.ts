@@ -90,6 +90,7 @@ export type {
 	StorageTransaction,
 	StoreConfig,
 } from "./storage/types.js";
+export { apiQueryTool, createApiQueryTool } from "./tools/api-query.js";
 // Artifacts
 export { ArtifactElement } from "./tools/artifacts/ArtifactElement.js";
 export { ArtifactPill } from "./tools/artifacts/ArtifactPill.js";
@@ -111,6 +112,7 @@ export { CalculateRenderer } from "./tools/renderers/CalculateRenderer.js";
 export { DefaultRenderer } from "./tools/renderers/DefaultRenderer.js";
 export { GetCurrentTimeRenderer } from "./tools/renderers/GetCurrentTimeRenderer.js";
 export type { ToolRenderer, ToolRenderResult } from "./tools/types.js";
+export { createWebSearchTool, webSearchTool } from "./tools/web-search.js";
 export type { Attachment } from "./utils/attachment-utils.js";
 // Utils
 export { loadAttachment } from "./utils/attachment-utils.js";
