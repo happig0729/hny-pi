@@ -7,7 +7,9 @@ import {
 	AppStorage,
 	ChatPanel,
 	CustomProvidersStore,
+	createApiQueryTool,
 	createJavaScriptReplTool,
+	createWebSearchTool,
 	IndexedDBStorageBackend,
 	// PersistentStorageDialog, // TODO: Fix - currently broken
 	ProviderKeysStore,
@@ -21,6 +23,7 @@ import {
 } from "@earendil-works/pi-web-ui";
 import { html, render } from "lit";
 import { Bell, History, Plus, Settings } from "lucide";
+import { loadConfig } from "./config.js";
 import "./app.css";
 import { icon } from "@mariozechner/mini-lit";
 import { Button } from "@mariozechner/mini-lit/dist/Button.js";
@@ -29,6 +32,9 @@ import { createSystemNotification, customConvertToLlm, registerCustomMessageRend
 
 // Register custom message renderers
 registerCustomMessageRenderers();
+
+// Config
+const config = loadConfig();
 
 // Create stores
 const settings = new SettingsStore();
@@ -61,6 +67,29 @@ sessions.setBackend(backend);
 // Create and set app storage
 const storage = new AppStorage(settings, providerKeys, sessions, customProviders, backend);
 setAppStorage(storage);
+
+// API auth token (auto-refreshed on login)
+let apiAuthToken: string | undefined;
+
+const refreshApiToken = async () => {
+	if (!config.api.auth.enabled || !config.api.auth.username) return;
+	try {
+		const res = await fetch(config.api.auth.endpoint, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				username: config.api.auth.username,
+				password: config.api.auth.password,
+			}),
+		});
+		if (res.ok) {
+			const data = await res.json();
+			apiAuthToken = data.accessToken;
+		}
+	} catch (_e) {
+		// Will retry next time
+	}
+};
 
 let currentSessionId: string | undefined;
 let currentTitle = "";
@@ -169,7 +198,7 @@ Available tools:
 - Artifacts: Create interactive HTML, SVG, Markdown, and text artifacts
 
 Feel free to use these tools when needed to provide accurate and helpful responses.`,
-			model: getModel("anthropic", "claude-sonnet-4-5-20250929"),
+			model: getModel("deepseek", "deepseek-v4-flash"),
 			thinkingLevel: "off",
 			messages: [],
 			tools: [],
@@ -210,7 +239,19 @@ Feel free to use these tools when needed to provide accurate and helpful respons
 			// Create javascript_repl tool with access to attachments + artifacts
 			const replTool = createJavaScriptReplTool();
 			replTool.runtimeProvidersFactory = runtimeProvidersFactory;
-			return [replTool];
+
+			// Create web search tool using Tavily
+			const searchTool = createWebSearchTool();
+			if (config.apiKeys.tavily) {
+				searchTool.tavilyApiKey = config.apiKeys.tavily;
+			}
+
+			// Create API query tool for backend data access
+			const apiTool = createApiQueryTool();
+			apiTool.baseUrl = config.api.baseUrl;
+			apiTool.authToken = apiAuthToken;
+
+			return [replTool, searchTool, apiTool];
 		},
 	});
 };
@@ -396,6 +437,16 @@ async function initApp() {
 	// if (storage.sessions) {
 	// 	await PersistentStorageDialog.request();
 	// }
+
+	// Pre-set DeepSeek API key from config
+	if (config.apiKeys.deepseek) {
+		await providerKeys.set("deepseek", config.apiKeys.deepseek);
+	}
+
+	// Auto-login for API query tool
+	await refreshApiToken();
+	// Refresh token every 10 minutes
+	setInterval(refreshApiToken, 10 * 60 * 1000);
 
 	// Create ChatPanel
 	chatPanel = new ChatPanel();
