@@ -45,7 +45,7 @@ button {
 .archive-app {
 	height: 100vh;
 	display: grid;
-	grid-template-columns: 236px minmax(720px, 1fr) 360px;
+	grid-template-columns: 224px minmax(620px, 1fr) minmax(480px, 540px);
 	grid-template-rows: 56px 1fr;
 	overflow: hidden;
 }
@@ -171,6 +171,7 @@ button {
 	overflow: hidden;
 	display: flex;
 	flex-direction: column;
+	min-width: 0;
 }
 
 .page-head {
@@ -499,28 +500,183 @@ h3 {
 }
 
 .agent-head {
-	padding: 16px;
+	padding: 12px 14px;
 	border-bottom: 1px solid var(--archive-line);
+	flex: 0 0 auto;
+}
+
+.agent-context {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 8px;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--archive-muted);
+	font-size: 11px;
+	line-height: 1.45;
+}
+
+.agent-context div {
+	min-width: 0;
+	padding: 3px 6px;
+	border: 1px solid var(--archive-line);
+	border-radius: 6px;
+	background: var(--archive-surface);
+	white-space: nowrap;
 }
 
 .agent-tabs {
 	display: grid;
 	grid-template-columns: 1fr 1fr 1fr;
 	gap: 6px;
-	margin-top: 10px;
+	margin-top: 8px;
 }
 
 .agent-tab {
-	height: 30px;
+	height: 26px;
 	border-radius: 6px;
 	background: var(--archive-surface-2);
 	color: var(--archive-muted);
-	font-size: 12px;
+	font-size: 11px;
 }
 
 .agent-tab.active {
 	background: var(--archive-ink);
 	color: white;
+}
+
+.agent-workbench {
+	flex: 0 0 auto;
+	height: auto;
+	overflow: visible;
+	padding: 8px 10px;
+	border-bottom: 1px solid var(--archive-line);
+	background: #fbfcfa;
+}
+
+.agent-mini-metrics {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 5px;
+	margin-bottom: 6px;
+}
+
+.agent-mini-metric {
+	display: grid;
+	gap: 2px;
+	min-width: 0;
+	padding: 6px;
+	border: 1px solid var(--archive-line);
+	border-radius: 8px;
+	background: var(--archive-surface);
+}
+
+.agent-mini-metric span,
+.agent-action-grid span,
+.agent-item span {
+	color: var(--archive-muted);
+	font-size: 10px;
+	line-height: 1.35;
+}
+
+.agent-mini-metric strong {
+	font-size: 14px;
+	line-height: 1.1;
+}
+
+.agent-items {
+	display: grid;
+	gap: 5px;
+}
+
+.agent-item {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 8px;
+	align-items: start;
+	padding: 6px;
+	border: 1px solid var(--archive-line);
+	border-radius: 8px;
+	background: #fbfcfa;
+}
+
+.agent-item strong,
+.agent-item span {
+	display: block;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.agent-item strong {
+	font-size: 11px;
+	line-height: 1.35;
+}
+
+.agent-item-meta {
+	display: grid;
+	justify-items: end;
+	gap: 3px;
+	min-width: 64px;
+	text-align: right;
+}
+
+.agent-action-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 5px;
+	margin: 6px 0 0;
+}
+
+.agent-action-grid div {
+	min-width: 0;
+	padding: 6px;
+	border: 1px solid #cfe5d8;
+	border-radius: 8px;
+	background: white;
+}
+
+.agent-action-grid strong {
+	display: block;
+	margin-top: 2px;
+	font-size: 11px;
+	overflow-wrap: anywhere;
+}
+
+.agent-chat-shell {
+	flex: 1 1 0;
+	min-height: 0;
+	background: var(--archive-surface);
+}
+
+.agent-chat-shell pi-chat-panel {
+	height: 100%;
+	min-height: 0;
+}
+
+.agent-chat-shell agent-interface {
+	min-width: 0;
+}
+
+.agent-chat-shell .max-w-3xl,
+.agent-chat-shell .max-w-4xl,
+.agent-chat-shell .max-w-5xl {
+	max-width: none;
+}
+
+.agent-chat-shell .px-6 {
+	padding-left: 12px;
+	padding-right: 12px;
+}
+
+.agent-loading {
+	height: 100%;
+	display: grid;
+	place-items: center;
+	gap: 8px;
+	color: var(--archive-muted);
 }
 
 .agent-body {
@@ -534,8 +690,25 @@ h3 {
 	border: 1px solid var(--archive-line);
 	background: var(--archive-surface);
 	border-radius: 8px;
-	padding: 12px;
-	margin-bottom: 12px;
+	padding: 7px;
+	margin-bottom: 6px;
+}
+
+.agent-card.compact .agent-list {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 2px 10px;
+	padding-left: 14px;
+}
+
+.agent-card-title {
+	font-size: 12px;
+	margin-bottom: 5px;
+}
+
+.agent-list {
+	font-size: 11px;
+	line-height: 1.35;
 }
 
 .agent-card.important {
@@ -675,7 +848,10 @@ h3 {
 	width: 142px;
 	height: 142px;
 	border-radius: 50%;
-	background: conic-gradient(var(--archive-green) 0 74%, var(--archive-amber) 74% 88%, var(--archive-red) 88% 100%);
+	background: conic-gradient(
+		var(--archive-green) 0 var(--precheck-ratio, 0%),
+		var(--archive-line) var(--precheck-ratio, 0%) 100%
+	);
 	display: grid;
 	place-items: center;
 	margin: 10px auto;
@@ -707,7 +883,7 @@ h3 {
 
 @media (max-width: 1180px) {
 	.archive-app {
-		grid-template-columns: 72px minmax(620px, 1fr) 330px;
+		grid-template-columns: 72px minmax(560px, 1fr) minmax(420px, 460px);
 	}
 
 	.brand span,
