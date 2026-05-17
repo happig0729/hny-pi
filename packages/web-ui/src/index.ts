@@ -90,6 +90,7 @@ export type {
 	StorageTransaction,
 	StoreConfig,
 } from "./storage/types.js";
+export { API_ENDPOINTS, type ApiEndpoint } from "./tools/api-endpoints.js";
 export { apiQueryTool, createApiQueryTool } from "./tools/api-query.js";
 // Artifacts
 export { ArtifactElement } from "./tools/artifacts/ArtifactElement.js";

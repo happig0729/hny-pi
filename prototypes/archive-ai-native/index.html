@@ -1,0 +1,1337 @@
+<!doctype html>
+<html lang="zh-CN">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>AI Native 工程档案全生命周期管理系统 - 高保真原型</title>
+		<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+		<style>
+			:root {
+				--bg: #f6f7f4;
+				--surface: #ffffff;
+				--surface-2: #f0f4f1;
+				--line: #d9ded8;
+				--line-strong: #b8c1ba;
+				--text: #18201d;
+				--muted: #66716b;
+				--muted-2: #87928b;
+				--green: #1f7a55;
+				--green-soft: #dff0e6;
+				--teal: #0d6f73;
+				--blue: #2d65b8;
+				--blue-soft: #e4ecf9;
+				--amber: #a76812;
+				--amber-soft: #f7ead2;
+				--red: #b84035;
+				--red-soft: #f7dfdc;
+				--ink: #2a2f38;
+				--shadow: 0 16px 40px rgba(40, 48, 43, 0.08);
+				font-family:
+					Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+					"PingFang SC", "Microsoft YaHei", sans-serif;
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+
+			body {
+				margin: 0;
+				background: var(--bg);
+				color: var(--text);
+				font-size: 14px;
+				letter-spacing: 0;
+			}
+
+			button,
+			input,
+			select {
+				font: inherit;
+			}
+
+			button {
+				border: 0;
+				cursor: pointer;
+			}
+
+			.app {
+				height: 100vh;
+				display: grid;
+				grid-template-columns: 236px minmax(720px, 1fr) 360px;
+				grid-template-rows: 56px 1fr;
+				overflow: hidden;
+			}
+
+			.topbar {
+				grid-column: 1 / -1;
+				display: flex;
+				align-items: center;
+				gap: 16px;
+				padding: 0 18px;
+				border-bottom: 1px solid var(--line);
+				background: rgba(255, 255, 255, 0.86);
+				backdrop-filter: blur(16px);
+				z-index: 5;
+			}
+
+			.brand {
+				width: 218px;
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				font-weight: 700;
+			}
+
+			.brand-mark {
+				width: 30px;
+				height: 30px;
+				border-radius: 6px;
+				background: linear-gradient(135deg, var(--green), var(--teal));
+				display: grid;
+				place-items: center;
+				color: white;
+			}
+
+			.project-switcher {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				height: 36px;
+				padding: 0 12px;
+				border: 1px solid var(--line);
+				border-radius: 6px;
+				background: var(--surface);
+				min-width: 280px;
+			}
+
+			.search {
+				flex: 1;
+				max-width: 520px;
+				height: 36px;
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				padding: 0 12px;
+				border: 1px solid var(--line);
+				border-radius: 6px;
+				background: var(--surface-2);
+				color: var(--muted);
+			}
+
+			.top-actions {
+				margin-left: auto;
+				display: flex;
+				gap: 8px;
+			}
+
+			.icon-btn {
+				width: 36px;
+				height: 36px;
+				border-radius: 6px;
+				background: var(--surface);
+				border: 1px solid var(--line);
+				display: grid;
+				place-items: center;
+				color: var(--muted);
+			}
+
+			.sidebar {
+				grid-row: 2;
+				padding: 16px 12px;
+				border-right: 1px solid var(--line);
+				background: #fbfcfa;
+				overflow-y: auto;
+			}
+
+			.nav-label {
+				font-size: 12px;
+				color: var(--muted-2);
+				padding: 10px 10px 6px;
+			}
+
+			.nav-btn {
+				width: 100%;
+				height: 40px;
+				padding: 0 10px;
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				background: transparent;
+				color: var(--muted);
+				border-radius: 6px;
+				text-align: left;
+				margin-bottom: 4px;
+			}
+
+			.nav-btn.active {
+				background: var(--green-soft);
+				color: var(--green);
+				font-weight: 700;
+			}
+
+			.main {
+				grid-row: 2;
+				overflow: auto;
+				padding: 20px;
+			}
+
+			.agent-panel {
+				grid-row: 2;
+				border-left: 1px solid var(--line);
+				background: #fbfcfa;
+				overflow: hidden;
+				display: flex;
+				flex-direction: column;
+			}
+
+			.page {
+				display: none;
+				min-height: calc(100vh - 96px);
+			}
+
+			.page.active {
+				display: block;
+			}
+
+			.page-head {
+				display: flex;
+				align-items: flex-start;
+				justify-content: space-between;
+				gap: 16px;
+				margin-bottom: 18px;
+			}
+
+			.eyebrow {
+				color: var(--green);
+				font-size: 12px;
+				font-weight: 700;
+				text-transform: uppercase;
+				margin-bottom: 6px;
+			}
+
+			h1 {
+				font-size: 26px;
+				line-height: 1.2;
+				margin: 0 0 8px;
+			}
+
+			h2 {
+				font-size: 17px;
+				margin: 0;
+			}
+
+			h3 {
+				font-size: 14px;
+				margin: 0;
+			}
+
+			.sub {
+				color: var(--muted);
+				line-height: 1.55;
+			}
+
+			.btn {
+				height: 36px;
+				padding: 0 12px;
+				border-radius: 6px;
+				display: inline-flex;
+				align-items: center;
+				gap: 8px;
+				border: 1px solid var(--line);
+				background: var(--surface);
+				color: var(--text);
+				white-space: nowrap;
+			}
+
+			.btn.primary {
+				background: var(--green);
+				border-color: var(--green);
+				color: white;
+			}
+
+			.btn.warn {
+				background: var(--amber-soft);
+				color: var(--amber);
+				border-color: #edcf9c;
+			}
+
+			.grid {
+				display: grid;
+				gap: 14px;
+			}
+
+			.grid.cols-3 {
+				grid-template-columns: repeat(3, minmax(0, 1fr));
+			}
+
+			.grid.cols-2 {
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+			}
+
+			.card {
+				background: var(--surface);
+				border: 1px solid var(--line);
+				border-radius: 8px;
+				box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
+			}
+
+			.card.pad {
+				padding: 16px;
+			}
+
+			.stat {
+				display: flex;
+				flex-direction: column;
+				gap: 8px;
+			}
+
+			.stat-top {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				color: var(--muted);
+			}
+
+			.stat-value {
+				font-size: 28px;
+				font-weight: 750;
+			}
+
+			.badge {
+				display: inline-flex;
+				align-items: center;
+				height: 24px;
+				padding: 0 8px;
+				border-radius: 999px;
+				font-size: 12px;
+				font-weight: 650;
+			}
+
+			.badge.green {
+				background: var(--green-soft);
+				color: var(--green);
+			}
+
+			.badge.blue {
+				background: var(--blue-soft);
+				color: var(--blue);
+			}
+
+			.badge.amber {
+				background: var(--amber-soft);
+				color: var(--amber);
+			}
+
+			.badge.red {
+				background: var(--red-soft);
+				color: var(--red);
+			}
+
+			.timeline {
+				display: grid;
+				grid-template-columns: repeat(8, 1fr);
+				gap: 8px;
+				margin-top: 14px;
+			}
+
+			.stage {
+				position: relative;
+				padding: 12px 10px;
+				border: 1px solid var(--line);
+				border-radius: 8px;
+				background: var(--surface);
+				min-height: 72px;
+			}
+
+			.stage.done {
+				border-color: #9ecbb4;
+				background: #f1faf5;
+			}
+
+			.stage.current {
+				border-color: var(--amber);
+				background: #fff8eb;
+			}
+
+			.stage.blocked {
+				border-color: #e4a7a1;
+				background: #fff4f3;
+			}
+
+			.stage span {
+				display: block;
+				font-size: 12px;
+				color: var(--muted);
+				margin-top: 6px;
+			}
+
+			.section {
+				margin-top: 16px;
+			}
+
+			.section-head {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				margin-bottom: 10px;
+			}
+
+			.table {
+				width: 100%;
+				border-collapse: collapse;
+				background: var(--surface);
+				border: 1px solid var(--line);
+				border-radius: 8px;
+				overflow: hidden;
+			}
+
+			.table th,
+			.table td {
+				padding: 12px;
+				border-bottom: 1px solid var(--line);
+				text-align: left;
+				vertical-align: top;
+			}
+
+			.table th {
+				background: #f8faf7;
+				color: var(--muted);
+				font-size: 12px;
+				font-weight: 700;
+			}
+
+			.table tr:last-child td {
+				border-bottom: 0;
+			}
+
+			.split {
+				display: grid;
+				grid-template-columns: 280px minmax(0, 1fr);
+				gap: 14px;
+			}
+
+			.tree {
+				padding: 12px;
+			}
+
+			.tree-row {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				height: 32px;
+				padding: 0 8px;
+				border-radius: 6px;
+				color: var(--muted);
+			}
+
+			.tree-row.active {
+				color: var(--green);
+				background: var(--green-soft);
+				font-weight: 700;
+			}
+
+			.tree-row.indent {
+				margin-left: 18px;
+			}
+
+			.workbench {
+				display: grid;
+				grid-template-columns: 1fr 300px;
+				gap: 14px;
+			}
+
+			.document-preview {
+				background: #eef1ee;
+				border: 1px solid var(--line);
+				border-radius: 8px;
+				padding: 18px;
+				min-height: 456px;
+			}
+
+			.paper {
+				width: 100%;
+				max-width: 560px;
+				min-height: 420px;
+				margin: 0 auto;
+				background: white;
+				border: 1px solid #d7dbd5;
+				box-shadow: var(--shadow);
+				padding: 30px;
+			}
+
+			.paper-title {
+				text-align: center;
+				font-size: 20px;
+				font-weight: 750;
+				margin: 20px 0 26px;
+			}
+
+			.paper-line {
+				height: 10px;
+				background: #dfe5df;
+				border-radius: 2px;
+				margin-bottom: 12px;
+			}
+
+			.paper-line.short {
+				width: 62%;
+			}
+
+			.paper-table {
+				display: grid;
+				grid-template-columns: 1fr 1fr;
+				border: 1px solid #cfd6cf;
+				margin-top: 22px;
+			}
+
+			.paper-cell {
+				height: 38px;
+				border-right: 1px solid #cfd6cf;
+				border-bottom: 1px solid #cfd6cf;
+				padding: 9px;
+				color: #4d5750;
+			}
+
+			.paper-cell:nth-child(2n) {
+				border-right: 0;
+			}
+
+			.ai-chip {
+				display: inline-flex;
+				align-items: center;
+				gap: 6px;
+				padding: 5px 8px;
+				border-radius: 999px;
+				background: #edf5f8;
+				color: var(--teal);
+				font-size: 12px;
+				font-weight: 700;
+			}
+
+			.confidence {
+				height: 7px;
+				border-radius: 999px;
+				background: #e7ebe7;
+				overflow: hidden;
+				min-width: 100px;
+			}
+
+			.confidence span {
+				display: block;
+				height: 100%;
+				background: var(--green);
+			}
+
+			.agent-head {
+				padding: 16px;
+				border-bottom: 1px solid var(--line);
+			}
+
+			.agent-title {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				margin-bottom: 10px;
+			}
+
+			.agent-tabs {
+				display: grid;
+				grid-template-columns: 1fr 1fr 1fr;
+				gap: 6px;
+			}
+
+			.agent-tab {
+				height: 30px;
+				border-radius: 6px;
+				background: var(--surface-2);
+				color: var(--muted);
+				font-size: 12px;
+			}
+
+			.agent-tab.active {
+				background: var(--ink);
+				color: white;
+			}
+
+			.agent-body {
+				padding: 14px;
+				overflow-y: auto;
+				flex: 1;
+			}
+
+			.agent-card {
+				border: 1px solid var(--line);
+				background: var(--surface);
+				border-radius: 8px;
+				padding: 12px;
+				margin-bottom: 12px;
+			}
+
+			.agent-card.important {
+				border-color: #edcf9c;
+				background: #fffaf0;
+			}
+
+			.agent-card.danger {
+				border-color: #e3b0aa;
+				background: #fff7f6;
+			}
+
+			.agent-card-title {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				font-weight: 750;
+				margin-bottom: 8px;
+			}
+
+			.agent-list {
+				margin: 0;
+				padding-left: 18px;
+				color: var(--muted);
+				line-height: 1.65;
+			}
+
+			.action-proposal {
+				border: 1px solid #98c5ad;
+				background: #f4fbf7;
+				border-radius: 8px;
+				padding: 12px;
+				margin-bottom: 12px;
+			}
+
+			.kv {
+				display: grid;
+				grid-template-columns: 88px 1fr;
+				gap: 6px 10px;
+				font-size: 12px;
+				margin: 10px 0;
+			}
+
+			.kv dt {
+				color: var(--muted);
+			}
+
+			.kv dd {
+				margin: 0;
+				color: var(--text);
+				font-weight: 650;
+			}
+
+			.agent-input {
+				border-top: 1px solid var(--line);
+				padding: 12px;
+				background: var(--surface);
+			}
+
+			.input-box {
+				min-height: 72px;
+				border: 1px solid var(--line);
+				border-radius: 8px;
+				padding: 10px;
+				color: var(--muted);
+				background: #fbfcfa;
+			}
+
+			.form-grid {
+				display: grid;
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+				gap: 12px;
+			}
+
+			.field {
+				border: 1px solid var(--line);
+				background: var(--surface);
+				border-radius: 8px;
+				padding: 12px;
+			}
+
+			.field label {
+				display: block;
+				color: var(--muted);
+				font-size: 12px;
+				margin-bottom: 8px;
+			}
+
+			.field-value {
+				font-weight: 700;
+				margin-bottom: 8px;
+			}
+
+			.field-source {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				color: var(--muted);
+				font-size: 12px;
+			}
+
+			.review-marker {
+				display: grid;
+				grid-template-columns: 32px 1fr auto;
+				gap: 10px;
+				align-items: start;
+				padding: 12px;
+				border-bottom: 1px solid var(--line);
+			}
+
+			.review-marker:last-child {
+				border-bottom: 0;
+			}
+
+			.marker-icon {
+				width: 32px;
+				height: 32px;
+				border-radius: 6px;
+				display: grid;
+				place-items: center;
+			}
+
+			.marker-icon.red {
+				background: var(--red-soft);
+				color: var(--red);
+			}
+
+			.marker-icon.amber {
+				background: var(--amber-soft);
+				color: var(--amber);
+			}
+
+			.sign-flow {
+				display: grid;
+				gap: 10px;
+			}
+
+			.sign-node {
+				display: grid;
+				grid-template-columns: 44px 1fr auto;
+				gap: 12px;
+				align-items: center;
+				padding: 14px;
+				border: 1px solid var(--line);
+				background: var(--surface);
+				border-radius: 8px;
+			}
+
+			.node-index {
+				width: 36px;
+				height: 36px;
+				border-radius: 50%;
+				background: var(--surface-2);
+				display: grid;
+				place-items: center;
+				font-weight: 800;
+				color: var(--muted);
+			}
+
+			.node-index.done {
+				background: var(--green);
+				color: white;
+			}
+
+			.node-index.active {
+				background: var(--amber);
+				color: white;
+			}
+
+			.precheck-grid {
+				display: grid;
+				grid-template-columns: 1.1fr 0.9fr;
+				gap: 14px;
+			}
+
+			.ring {
+				width: 142px;
+				height: 142px;
+				border-radius: 50%;
+				background: conic-gradient(var(--green) 0 74%, var(--amber) 74% 88%, var(--red) 88% 100%);
+				display: grid;
+				place-items: center;
+				margin: 10px auto;
+			}
+
+			.ring-inner {
+				width: 104px;
+				height: 104px;
+				border-radius: 50%;
+				background: white;
+				display: grid;
+				place-items: center;
+				text-align: center;
+				font-weight: 800;
+				font-size: 26px;
+			}
+
+			.issue {
+				display: flex;
+				gap: 10px;
+				padding: 12px 0;
+				border-bottom: 1px solid var(--line);
+			}
+
+			.issue:last-child {
+				border-bottom: 0;
+			}
+
+			.mobile-note {
+				display: none;
+				padding: 12px;
+				background: var(--amber-soft);
+				color: var(--amber);
+				border-bottom: 1px solid #edcf9c;
+			}
+
+			@media (max-width: 1180px) {
+				.app {
+					grid-template-columns: 72px minmax(620px, 1fr) 330px;
+				}
+
+				.brand span,
+				.nav-btn span,
+				.nav-label,
+				.project-switcher {
+					display: none;
+				}
+
+				.brand {
+					width: 42px;
+				}
+			}
+
+			@media (max-width: 920px) {
+				.mobile-note {
+					display: block;
+				}
+
+				.app {
+					height: auto;
+					min-height: 100vh;
+					display: block;
+					overflow: auto;
+				}
+
+				.topbar,
+				.sidebar,
+				.agent-panel {
+					display: none;
+				}
+
+				.main {
+					padding: 14px;
+					overflow: visible;
+				}
+
+				.grid.cols-3,
+				.grid.cols-2,
+				.split,
+				.workbench,
+				.precheck-grid {
+					grid-template-columns: 1fr;
+				}
+
+				.timeline {
+					grid-template-columns: repeat(2, 1fr);
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="mobile-note">移动端原型以核心内容栈式展示；桌面端可查看完整三栏工作台。</div>
+		<div class="app">
+			<header class="topbar">
+				<div class="brand">
+					<div class="brand-mark"><i data-lucide="archive"></i></div>
+					<span>Archive AI OS</span>
+				</div>
+				<div class="project-switcher">
+					<i data-lucide="building-2"></i>
+					<strong>青岛国际科创中心一期</strong>
+					<span class="badge amber">预检中</span>
+				</div>
+				<div class="search">
+					<i data-lucide="search"></i>
+					<span>搜索项目、文件、目录节点、审核意见、签章任务</span>
+				</div>
+				<div class="top-actions">
+					<button class="icon-btn" title="通知"><i data-lucide="bell"></i></button>
+					<button class="icon-btn" title="审计"><i data-lucide="shield-check"></i></button>
+					<button class="icon-btn" title="设置"><i data-lucide="settings"></i></button>
+				</div>
+			</header>
+
+			<nav class="sidebar">
+				<div class="nav-label">生命周期工作台</div>
+				<button class="nav-btn active" data-page="cockpit"><i data-lucide="layout-dashboard"></i><span>项目驾驶舱</span></button>
+				<button class="nav-btn" data-page="intake"><i data-lucide="files"></i><span>文件著录</span></button>
+				<button class="nav-btn" data-page="compile"><i data-lucide="clipboard-pen"></i><span>编制填报</span></button>
+				<button class="nav-btn" data-page="review"><i data-lucide="badge-check"></i><span>审核整改</span></button>
+				<button class="nav-btn" data-page="signing"><i data-lucide="signature"></i><span>签章流转</span></button>
+				<button class="nav-btn" data-page="archive"><i data-lucide="package-check"></i><span>归档预检</span></button>
+				<div class="nav-label">治理</div>
+				<button class="nav-btn" data-page="governance"><i data-lucide="fingerprint"></i><span>权限审计</span></button>
+			</nav>
+
+			<main class="main">
+				<section id="cockpit" class="page active">
+					<div class="page-head">
+						<div>
+							<div class="eyebrow">Project Control Agent</div>
+							<h1>项目全生命周期驾驶舱</h1>
+							<div class="sub">围绕 Project / Unit / Catalog / File / Review / Signing / ArchivePackage 的生产状态、阻塞和下一步动作。</div>
+						</div>
+						<div>
+							<button class="btn"><i data-lucide="download"></i> 导出周报</button>
+							<button class="btn primary"><i data-lucide="play-circle"></i> 运行归档预检</button>
+						</div>
+					</div>
+
+					<div class="grid cols-3">
+						<div class="card pad stat">
+							<div class="stat-top"><span>档案项完成率</span><i data-lucide="folder-check"></i></div>
+							<div class="stat-value">82%</div>
+							<div class="sub">312 / 381 个目录 file 节点已有有效档案对象</div>
+						</div>
+						<div class="card pad stat">
+							<div class="stat-top"><span>待处理阻塞</span><i data-lucide="triangle-alert"></i></div>
+							<div class="stat-value">17</div>
+							<div class="sub">缺项 6、未签章 8、目录映射缺失 3</div>
+						</div>
+						<div class="card pad stat">
+							<div class="stat-top"><span>AI 可自动建议项</span><i data-lucide="sparkles"></i></div>
+							<div class="stat-value">64</div>
+							<div class="sub">高置信度著录 42、表单填充 18、审核意见 4</div>
+						</div>
+					</div>
+
+					<div class="section">
+						<div class="section-head">
+							<h2>生命周期阶段</h2>
+							<span class="badge blue">当前：合规预检</span>
+						</div>
+						<div class="timeline">
+							<div class="stage done"><strong>立项</strong><span>项目与成员已建</span></div>
+							<div class="stage done"><strong>目录</strong><span>模板已启用</span></div>
+							<div class="stage done"><strong>编制</strong><span>表单完成 91%</span></div>
+							<div class="stage done"><strong>著录</strong><span>文件完成 86%</span></div>
+							<div class="stage current"><strong>审核</strong><span>4 项待复审</span></div>
+							<div class="stage current"><strong>签章</strong><span>8 个节点待签</span></div>
+							<div class="stage blocked"><strong>预检</strong><span>9 个问题阻断</span></div>
+							<div class="stage"><strong>采集</strong><span>等待归档包</span></div>
+						</div>
+					</div>
+
+					<div class="section grid cols-2">
+						<div class="card">
+							<div class="section-head" style="padding: 14px 14px 0">
+								<h2>阻塞项</h2>
+								<span class="badge red">需处理</span>
+							</div>
+							<table class="table" style="border: 0; border-radius: 0; margin-top: 8px">
+								<tr><th>阻塞</th><th>影响对象</th><th>建议</th></tr>
+								<tr><td>缺少竣工验收备案表</td><td>目录节点 4.2.03</td><td><span class="ai-chip">建议通知资料员</span></td></tr>
+								<tr><td>3 个目录未映射城建标准</td><td>目录模板</td><td><span class="ai-chip">生成映射草案</span></td></tr>
+								<tr><td>8 个文件未完成签章</td><td>SigningTask</td><td><span class="ai-chip">催办待签人</span></td></tr>
+							</table>
+						</div>
+						<div class="card pad">
+							<div class="section-head">
+								<h2>下一步推荐</h2>
+								<span class="badge green">可执行</span>
+							</div>
+							<div class="action-proposal">
+								<div class="agent-card-title"><i data-lucide="workflow"></i> 生成整改清单并分派责任人</div>
+								<dl class="kv">
+									<dt>Action</dt><dd>createRectificationTasks</dd>
+									<dt>影响对象</dt><dd>17 个阻塞项，6 位项目成员</dd>
+									<dt>确认等级</dt><dd>中风险，需项目管理员确认</dd>
+								</dl>
+								<button class="btn primary"><i data-lucide="check"></i> 确认生成</button>
+								<button class="btn"><i data-lucide="eye"></i> 查看证据</button>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<section id="intake" class="page">
+					<div class="page-head">
+						<div>
+							<div class="eyebrow">File Cataloguing Agent</div>
+							<h1>文件上传、解析、分类与著录</h1>
+							<div class="sub">AI 负责理解文件，结构化界面负责批量核验、确认和审计。</div>
+						</div>
+						<button class="btn primary"><i data-lucide="upload-cloud"></i> 上传文件</button>
+					</div>
+					<div class="split">
+						<div class="card tree">
+							<h2 style="padding: 4px 8px 10px">档案目录树</h2>
+							<div class="tree-row"><i data-lucide="folder"></i> 工程准备阶段文件</div>
+							<div class="tree-row indent"><i data-lucide="folder"></i> 立项文件</div>
+							<div class="tree-row"><i data-lucide="folder"></i> 施工文件</div>
+							<div class="tree-row indent active"><i data-lucide="file-text"></i> 施工组织设计</div>
+							<div class="tree-row indent"><i data-lucide="file-text"></i> 技术交底记录</div>
+							<div class="tree-row"><i data-lucide="folder"></i> 竣工图</div>
+							<div class="tree-row indent"><i data-lucide="file-text"></i> 建筑竣工图</div>
+						</div>
+						<div class="card">
+							<table class="table">
+								<tr><th>文件</th><th>AI 建议目录</th><th>字段建议</th><th>置信度</th><th>状态</th></tr>
+								<tr>
+									<td><strong>施工组织设计.pdf</strong><div class="sub">PDF · 42 页</div></td>
+									<td>施工文件 / 施工组织设计</td>
+									<td>题名、责任者、日期已提取</td>
+									<td><div class="confidence"><span style="width: 94%"></span></div></td>
+									<td><span class="badge green">可批量确认</span></td>
+								</tr>
+								<tr>
+									<td><strong>给排水竣工图.pdf</strong><div class="sub">PDF · 18 页</div></td>
+									<td>竣工图 / 给排水</td>
+									<td>页数、载体、编制单位已提取</td>
+									<td><div class="confidence"><span style="width: 86%"></span></div></td>
+									<td><span class="badge blue">建议抽检</span></td>
+								</tr>
+								<tr>
+									<td><strong>扫描件_0421.jpg</strong><div class="sub">图片 · OCR 完成</div></td>
+									<td>未确认，可能为隐蔽验收记录</td>
+									<td>OCR 噪声较高</td>
+									<td><div class="confidence"><span style="width: 48%; background: var(--amber)"></span></div></td>
+									<td><span class="badge amber">人工复核</span></td>
+								</tr>
+							</table>
+						</div>
+					</div>
+				</section>
+
+				<section id="compile" class="page">
+					<div class="page-head">
+						<div>
+							<div class="eyebrow">Compilation Agent</div>
+							<h1>智能编制与表单填报</h1>
+							<div class="sub">字段级展示来源：项目默认值、历史记录、AI 推断、人工输入。</div>
+						</div>
+						<button class="btn primary"><i data-lucide="save"></i> 保存编制实例</button>
+					</div>
+					<div class="workbench">
+						<div class="document-preview">
+							<div class="paper">
+								<div class="paper-title">单位工程质量竣工验收记录</div>
+								<div class="paper-table">
+									<div class="paper-cell">工程名称</div>
+									<div class="paper-cell">青岛国际科创中心一期</div>
+									<div class="paper-cell">施工单位</div>
+									<div class="paper-cell">青建集团股份公司</div>
+									<div class="paper-cell">监理单位</div>
+									<div class="paper-cell">海信监理有限公司</div>
+									<div class="paper-cell">验收日期</div>
+									<div class="paper-cell">2026-05-12</div>
+								</div>
+								<div class="paper-line" style="margin-top: 26px"></div>
+								<div class="paper-line short"></div>
+								<div class="paper-line"></div>
+							</div>
+						</div>
+						<div class="grid">
+							<div class="field">
+								<label>工程名称</label>
+								<div class="field-value">青岛国际科创中心一期</div>
+								<div class="field-source"><span>项目默认值</span><span>100%</span></div>
+							</div>
+							<div class="field">
+								<label>施工单位</label>
+								<div class="field-value">青建集团股份公司</div>
+								<div class="field-source"><span>Project.constructionUnit</span><span>100%</span></div>
+							</div>
+							<div class="field">
+								<label>验收结论</label>
+								<div class="field-value">符合设计及施工质量验收规范要求</div>
+								<div class="field-source"><span>AI 推断 + 历史高频</span><span>83%</span></div>
+							</div>
+							<div class="field">
+								<label>项目负责人</label>
+								<div class="field-value">待人工确认</div>
+								<div class="field-source"><span>缺少可靠来源</span><span>42%</span></div>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<section id="review" class="page">
+					<div class="page-head">
+						<div>
+							<div class="eyebrow">Review Agent</div>
+							<h1>审核、问题标注与整改闭环</h1>
+							<div class="sub">AI 生成风险提示和审核意见草稿，审核责任仍由人员确认。</div>
+						</div>
+						<div>
+							<button class="btn warn"><i data-lucide="rotate-ccw"></i> 退回整改</button>
+							<button class="btn primary"><i data-lucide="check-circle-2"></i> 审核通过</button>
+						</div>
+					</div>
+					<div class="workbench">
+						<div class="document-preview">
+							<div class="paper">
+								<div class="paper-title">施工组织设计报审表</div>
+								<div class="paper-line"></div>
+								<div class="paper-line short"></div>
+								<div class="paper-table">
+									<div class="paper-cell">编制日期</div>
+									<div class="paper-cell" style="background: #fff4f3">2026-06-31</div>
+									<div class="paper-cell">签章状态</div>
+									<div class="paper-cell" style="background: #fff8eb">缺监理章</div>
+									<div class="paper-cell">目录节点</div>
+									<div class="paper-cell">施工组织设计</div>
+								</div>
+							</div>
+						</div>
+						<div class="card">
+							<div class="review-marker">
+								<div class="marker-icon red"><i data-lucide="calendar-x"></i></div>
+								<div><strong>日期非法</strong><div class="sub">提取到 2026-06-31，不是有效日期。</div></div>
+								<span class="badge red">阻断</span>
+							</div>
+							<div class="review-marker">
+								<div class="marker-icon amber"><i data-lucide="stamp"></i></div>
+								<div><strong>签章缺失</strong><div class="sub">监理单位节点未签，不能进入归档包。</div></div>
+								<span class="badge amber">整改</span>
+							</div>
+							<div class="review-marker">
+								<div class="marker-icon amber"><i data-lucide="message-square-text"></i></div>
+								<div><strong>退回意见草稿</strong><div class="sub">请修正编制日期，并补齐监理单位电子签章后重新提交。</div></div>
+								<button class="btn">采用</button>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<section id="signing" class="page">
+					<div class="page-head">
+						<div>
+							<div class="eyebrow">Signing Agent</div>
+							<h1>签章流程编排与待签聚合</h1>
+							<div class="sub">顺序 / 并行签章由 SigningTask 和 SigningNode 驱动，AI 负责规划和解释阻塞。</div>
+						</div>
+						<button class="btn primary"><i data-lucide="send"></i> 发起签章任务</button>
+					</div>
+					<div class="grid cols-2">
+						<div class="card pad">
+							<div class="section-head">
+								<h2>施工组织设计签章流程</h2>
+								<span class="badge amber">Sequential</span>
+							</div>
+							<div class="sign-flow">
+								<div class="sign-node"><div class="node-index done">1</div><div><strong>施工单位项目负责人</strong><div class="sub">已签 · 企业章有效</div></div><span class="badge green">完成</span></div>
+								<div class="sign-node"><div class="node-index active">2</div><div><strong>监理工程师</strong><div class="sub">当前节点 · 等待签章</div></div><span class="badge amber">待签</span></div>
+								<div class="sign-node"><div class="node-index">3</div><div><strong>总监理工程师</strong><div class="sub">等待前序节点完成</div></div><span class="badge blue">排队</span></div>
+								<div class="sign-node"><div class="node-index">4</div><div><strong>建设单位项目负责人</strong><div class="sub">等待前序节点完成</div></div><span class="badge blue">排队</span></div>
+							</div>
+						</div>
+						<div class="card pad">
+							<div class="section-head">
+								<h2>AI 阻塞解释</h2>
+								<span class="badge amber">需催办</span>
+							</div>
+							<ul class="agent-list">
+								<li>当前阻塞在 SigningNode #2，assignee 为王工。</li>
+								<li>顺序流程下，节点 #3、#4 不能提前签章。</li>
+								<li>监理工程师个人章将在 12 天后过期，不影响本次签章。</li>
+								<li>建议发送催办，并设置 24 小时后自动提醒。</li>
+							</ul>
+						</div>
+					</div>
+				</section>
+
+				<section id="archive" class="page">
+					<div class="page-head">
+						<div>
+							<div class="eyebrow">Archive Agent</div>
+							<h1>合规预检、归档包与采集闭环</h1>
+							<div class="sub">归档不是按钮，是完整性、标准映射、签章、文件版本和采集状态共同满足后的交付动作。</div>
+						</div>
+						<button class="btn primary"><i data-lucide="package-plus"></i> 生成归档包草案</button>
+					</div>
+					<div class="precheck-grid">
+						<div class="card pad">
+							<div class="section-head">
+								<h2>预检结果</h2>
+								<span class="badge red">未通过</span>
+							</div>
+							<div class="ring"><div class="ring-inner">74%</div></div>
+							<div class="grid cols-3">
+								<div class="stat"><div class="stat-value">312</div><div class="sub">通过项</div></div>
+								<div class="stat"><div class="stat-value">12</div><div class="sub">警告项</div></div>
+								<div class="stat"><div class="stat-value">9</div><div class="sub">阻断项</div></div>
+							</div>
+						</div>
+						<div class="card pad">
+							<div class="section-head">
+								<h2>阻断问题</h2>
+								<button class="btn"><i data-lucide="list-checks"></i> 生成整改清单</button>
+							</div>
+							<div class="issue"><span class="badge red">缺项</span><div><strong>竣工验收备案表缺失</strong><div class="sub">CatalogTemplateNode 4.2.03 无 Document 或 UploadFile。</div></div></div>
+							<div class="issue"><span class="badge red">签章</span><div><strong>8 个文件未完成签章</strong><div class="sub">SigningTask 未 completed，不能进入正式包。</div></div></div>
+							<div class="issue"><span class="badge amber">映射</span><div><strong>3 个项目目录未映射城建节点</strong><div class="sub">影响城建档案馆交付目录。</div></div></div>
+						</div>
+					</div>
+				</section>
+
+				<section id="governance" class="page">
+					<div class="page-head">
+						<div>
+							<div class="eyebrow">Governance Agent</div>
+							<h1>权限、审计与 AI 证据链</h1>
+							<div class="sub">任何 AI 辅助动作都必须能追踪：模型、证据、工具调用、用户确认、Action Type、operationId。</div>
+						</div>
+						<button class="btn"><i data-lucide="file-search"></i> 查询审计</button>
+					</div>
+					<div class="grid cols-2">
+						<div class="card">
+							<table class="table">
+								<tr><th>时间</th><th>用户</th><th>Action</th><th>结果</th></tr>
+								<tr><td>10:42</td><td>李明</td><td>bulkSubmitUploadFiles</td><td><span class="badge green">成功</span></td></tr>
+								<tr><td>10:35</td><td>王工</td><td>signSealFlowNode</td><td><span class="badge green">成功</span></td></tr>
+								<tr><td>10:21</td><td>系统</td><td>runPrecheck</td><td><span class="badge red">阻断</span></td></tr>
+							</table>
+						</div>
+						<div class="card pad">
+							<div class="section-head">
+								<h2>AI Run Record</h2>
+								<span class="badge blue">可追溯</span>
+							</div>
+							<dl class="kv">
+								<dt>Agent</dt><dd>Archive Agent</dd>
+								<dt>证据</dt><dd>17 个 EvidenceRef</dd>
+								<dt>工具</dt><dd>archive_query, archive_compliance_check</dd>
+								<dt>确认人</dt><dd>项目管理员 李明</dd>
+								<dt>结果</dt><dd>生成整改清单草案，未执行写操作</dd>
+							</dl>
+						</div>
+					</div>
+				</section>
+			</main>
+
+			<aside class="agent-panel">
+				<div class="agent-head">
+					<div class="agent-title">
+						<div>
+							<div class="eyebrow" id="agent-eyebrow">Project Control Agent</div>
+							<h2 id="agent-name">项目总控 Agent</h2>
+						</div>
+						<span class="badge green">在线</span>
+					</div>
+					<div class="agent-tabs">
+						<button class="agent-tab active">建议</button>
+						<button class="agent-tab">证据</button>
+						<button class="agent-tab">动作</button>
+					</div>
+				</div>
+				<div class="agent-body">
+					<div class="agent-card important">
+						<div class="agent-card-title"><i data-lucide="sparkles"></i> 当前上下文判断</div>
+						<ul class="agent-list" id="agent-summary">
+							<li>项目处于合规预检阶段。</li>
+							<li>归档包生成被 9 个阻断项限制。</li>
+							<li>优先处理缺项、签章和目录映射。</li>
+						</ul>
+					</div>
+					<div class="action-proposal">
+						<div class="agent-card-title"><i data-lucide="clipboard-list"></i> Action Proposal</div>
+						<dl class="kv" id="agent-action">
+							<dt>建议动作</dt><dd>生成整改清单</dd>
+							<dt>Action Type</dt><dd>runPrecheck / createRectificationTasks</dd>
+							<dt>确认等级</dt><dd>中风险</dd>
+						</dl>
+						<button class="btn primary"><i data-lucide="check"></i> 确认</button>
+						<button class="btn"><i data-lucide="x"></i> 暂不执行</button>
+					</div>
+					<div class="agent-card">
+						<div class="agent-card-title"><i data-lucide="braces"></i> Ontology Scope</div>
+						<ul class="agent-list" id="agent-scope">
+							<li>Project, Unit, UploadFile, Document</li>
+							<li>CompliancePrecheck, ArchivePackage</li>
+							<li>BelongsToProject, Archivable, HasStatus</li>
+						</ul>
+					</div>
+				</div>
+				<div class="agent-input">
+					<div class="input-box">问当前 Agent：为什么不能归档？哪些项可以批量处理？这个动作会影响哪些对象？</div>
+				</div>
+			</aside>
+		</div>
+
+		<script>
+			const agents = {
+				cockpit: {
+					eyebrow: "Project Control Agent",
+					name: "项目总控 Agent",
+					summary: ["项目处于合规预检阶段。", "归档包生成被 9 个阻断项限制。", "优先处理缺项、签章和目录映射。"],
+					action: ["生成整改清单", "runPrecheck / createRectificationTasks", "中风险"],
+					scope: ["Project, Unit, ProjectStats", "UploadFile, Document, SigningTask", "LifecycleGraph, ActionPolicy"],
+				},
+				intake: {
+					eyebrow: "File Cataloguing Agent",
+					name: "文件著录 Agent",
+					summary: ["识别到 2 个高置信度文件可批量著录。", "1 个 OCR 文件置信度低，需要人工复核。", "建议先确认高置信度项。"],
+					action: ["批量确认高置信度著录", "bulkSubmitUploadFiles", "中风险"],
+					scope: ["UploadFile, UploadFileVersion", "CatalogTemplateNode, CityArchiveCatalogNode", "FileParser, AiClassifier"],
+				},
+				compile: {
+					eyebrow: "Compilation Agent",
+					name: "编制 Agent",
+					summary: ["当前表单 3 个字段来自项目默认值。", "验收结论来自 AI 推断和历史高频。", "项目负责人缺少可靠来源。"],
+					action: ["保存已确认字段", "updateCompilationFormData", "低风险"],
+					scope: ["CompilationInstance, CompilationFormData", "TemplateInstruction, TemplateAutofillConfig", "Project default, History, AI inference"],
+				},
+				review: {
+					eyebrow: "Review Agent",
+					name: "审核 Agent",
+					summary: ["检测到 1 个阻断问题和 1 个整改问题。", "AI 已生成退回意见草稿。", "审核通过需要人工确认。"],
+					action: ["退回整改并附带意见", "rejectReview", "高风险"],
+					scope: ["Review, Document, UploadFile", "ReviewHintGenerator", "EvidenceRef, ReviewHistory"],
+				},
+				signing: {
+					eyebrow: "Signing Agent",
+					name: "签章 Agent",
+					summary: ["当前为顺序签章流程。", "阻塞在监理工程师节点。", "后续节点不能提前签。"],
+					action: ["发送待签催办", "notifySigningAssignee", "低风险"],
+					scope: ["SigningTask, SigningNode, Seal", "CanBeSigned, HasAssignee", "advanceSigningFlow"],
+				},
+				archive: {
+					eyebrow: "Archive Agent",
+					name: "归档 Agent",
+					summary: ["当前预检通过率 74%。", "9 个问题阻断正式归档包。", "建议先生成整改清单。"],
+					action: ["生成归档整改清单", "runPrecheck / generateArchivePackage", "高风险"],
+					scope: ["CompliancePrecheck, ArchivePackage", "CollectedItem, CityArchiveMapping", "Archivable, checkProjectArchiveCompleteness"],
+				},
+				governance: {
+					eyebrow: "Governance Agent",
+					name: "治理 Agent",
+					summary: ["本页展示 Action 和 Agent 审计。", "AI 只生成草案，未绕过确认执行写操作。", "可按用户、对象、Action 查询证据链。"],
+					action: ["查询 AI 运行审计", "queryAgentRunRecord", "低风险"],
+					scope: ["OperationLog, AgentRunRecord", "User, Role, ProjectMember", "ActionPolicy, EvidenceRef"],
+				},
+			};
+
+			function setPage(pageId) {
+				document.querySelectorAll(".page").forEach((page) => page.classList.toggle("active", page.id === pageId));
+				document.querySelectorAll(".nav-btn").forEach((btn) => btn.classList.toggle("active", btn.dataset.page === pageId));
+				const agent = agents[pageId];
+				document.getElementById("agent-eyebrow").textContent = agent.eyebrow;
+				document.getElementById("agent-name").textContent = agent.name;
+				document.getElementById("agent-summary").innerHTML = agent.summary.map((item) => `<li>${item}</li>`).join("");
+				document.getElementById("agent-action").innerHTML = `
+					<dt>建议动作</dt><dd>${agent.action[0]}</dd>
+					<dt>Action Type</dt><dd>${agent.action[1]}</dd>
+					<dt>确认等级</dt><dd>${agent.action[2]}</dd>
+				`;
+				document.getElementById("agent-scope").innerHTML = agent.scope.map((item) => `<li>${item}</li>`).join("");
+			}
+
+			document.querySelectorAll(".nav-btn").forEach((btn) => {
+				btn.addEventListener("click", () => setPage(btn.dataset.page));
+			});
+
+			if (window.lucide) {
+				window.lucide.createIcons({ attrs: { width: 18, height: 18, strokeWidth: 2 } });
+			}
+		</script>
+	</body>
+</html>
