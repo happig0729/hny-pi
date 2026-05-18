@@ -14,11 +14,13 @@ export type OntologyObjectType =
 	| "SigningNode"
 	| "CompliancePrecheck"
 	| "ArchivePackage"
-	| "CollectedItem";
+	| "CollectedItem"
+	| "ProjectMember";
 
 export type OntologyActionType =
 	| "createProject"
 	| "archiveProject"
+	| "createUnit"
 	| "bulkSubmitUploadFiles"
 	| "updateCompilationFormData"
 	| "rejectReview"
@@ -253,6 +255,13 @@ export const ontologyManifest: OntologyManifest = {
 			interfaces: ["HasStatus", "HasAudit", "BelongsToProject"],
 			statusValues: ["running", "passed", "failed", "warning"],
 		},
+		ProjectMember: {
+			name: "ProjectMember",
+			label: "项目成员",
+			domain: "project-management",
+			description: "项目团队成员，定义角色和数据权限范围。",
+			interfaces: ["HasAudit"],
+		},
 		ArchivePackage: {
 			name: "ArchivePackage",
 			label: "归档包",
@@ -329,6 +338,15 @@ export const ontologyManifest: OntologyManifest = {
 			trigger: "tenant_admin",
 			inputs: ["name", "type", "buildingUnit", "location"],
 			sideEffects: ["生成接入码", "创建默认目录结构", "记录操作日志"],
+		},
+		createUnit: {
+			name: "createUnit",
+			label: "创建单位工程",
+			domain: "project-management",
+			operationId: "createUnit",
+			trigger: "project_admin",
+			inputs: ["name", "engType", "structureType", "floors", "buildingArea"],
+			sideEffects: ["创建单位工程/标段", "关联到项目", "记录操作日志"],
 		},
 		archiveProject: {
 			name: "archiveProject",
@@ -539,6 +557,16 @@ export const ontologyManifest: OntologyManifest = {
 			sideEffects: ["项目锁定", "禁止编制和上传", "触发归档预检"],
 			auditRequired: true,
 			evidenceRequired: true,
+		},
+		createUnit: {
+			actionType: "createUnit",
+			operationId: "createUnit",
+			requiredRole: "tenant_user",
+			requiredProjectRole: "project_admin",
+			confirmationLevel: "medium",
+			sideEffects: ["创建单位工程/标段", "关联到项目", "记录操作日志"],
+			auditRequired: true,
+			evidenceRequired: false,
 		},
 		bulkSubmitUploadFiles: {
 			actionType: "bulkSubmitUploadFiles",

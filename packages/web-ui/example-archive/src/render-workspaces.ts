@@ -1,9 +1,11 @@
 import { html, type TemplateResult } from "lit";
-import { getCurrentAnalysis, requireData } from "./app-state.js";
+import { apiClient, getCurrentAnalysis, refreshData, requireData, setActiveAgentPanelTab } from "./app-state.js";
 import { confirmationLabel, flowModeLabel, issueTone, objectLabel, roleLabel, stageState, statusLabel } from "./labels.js";
+import type { OntologyActionType } from "./ontology-runtime.js";
 import { ontologyManifest, ontologyRuntime } from "./ontology-runtime.js";
+import type { ApiCallOptions } from "./archive-api.js";
 import { renderArchivePackageTable, renderCollectionTable, renderCompilationTable, renderDocumentTable, renderUploadNodeTree } from "./render-tables.js";
-import { formatDate, formatFileSize, icon, renderEmptyState } from "./render-utils.js";
+import { formatDate, formatFileSize, icon, renderEmptyState, showModal, showToast } from "./render-utils.js";
 
 export function renderMetrics(): TemplateResult {
 	const analysis = getCurrentAnalysis();
@@ -85,6 +87,115 @@ export function renderIssueTable(): TemplateResult {
 	`;
 }
 
+function buildActionApiParams(actionType: OntologyActionType): ApiCallOptions | null {
+		const data = requireData();
+		const projectId = data.selectedProject?.id;
+		if (!projectId) return null;
+
+		switch (actionType) {
+			case "runPrecheck":
+				return { pathParams: { projectId }, body: {} };
+			case "packageProject":
+				return { pathParams: { projectId } };
+			case "archiveProject":
+				return { pathParams: { projectId } };
+			case "rejectReview": {
+				const pendingReview = data.reviews.find((r) => r.status === "pending");
+				if (!pendingReview) return null;
+				return { pathParams: { reviewId: pendingReview.id }, body: { comment: "审核不通过，请整改后重新提交" } };
+			}
+			case "bulkSubmitUploadFiles": {
+				const pendingFiles = data.uploads.filter((u) => u.status === "pending");
+				if (pendingFiles.length === 0) return null;
+				return { pathParams: { projectId }, body: { fileIds: pendingFiles.map((f) => f.id) } };
+			}
+			case "createSigningTask":
+			case "updateCompilationFormData":
+				return null;
+			case "createUnit":
+				return { pathParams: { projectId }, body: { name: "新单位工程" } };
+			case "createProject":
+				return {};
+			default:
+				return null;
+		}
+	}
+
+function missingParamsMessage(actionType: OntologyActionType): string {
+	switch (actionType) {
+		case "createSigningTask":
+			return "创建签章任务需要指定签章对象、节点和签章人，请通过签章流程入口操作。";
+		case "updateCompilationFormData":
+			return "编制表单数据更新需要指定编制实例和字段内容，请通过编制工作台操作。";
+		default:
+			return "缺少必要的业务参数，请检查当前项目数据。";
+	}
+}
+
+export async function handleConfirmAction(): Promise<void> {
+	const proposal = getCurrentAnalysis().actionProposal;
+
+	// Actions requiring user input redirect to modal forms
+	if (proposal.actionType === "createProject") {
+		await handleCreateProject();
+		return;
+	}
+	if (proposal.actionType === "createUnit") {
+		await handleCreateUnit();
+		return;
+	}
+
+	if (!proposal.canExecute) {
+		showToast("当前条件不满足，暂不能执行此操作", "error");
+		return;
+	}
+	if (!proposal.operationId) {
+		showToast("该操作未绑定后端接口", "error");
+		return;
+	}
+
+	const apiParams = buildActionApiParams(proposal.actionType);
+	if (!apiParams) {
+		showToast(missingParamsMessage(proposal.actionType), "error");
+		return;
+	}
+
+	const isHighRisk = proposal.confirmationLevel === "high";
+
+	const confirmed = window.confirm(
+		`确认执行「${proposal.label}」？\n\n` +
+		`确认要求：${confirmationLabel(proposal.confirmationLevel)}\n` +
+		`提交后影响：${proposal.sideEffects.join("、")}\n` +
+		`留痕要求：${proposal.auditRequired ? "需要记录操作日志" : "不强制留痕"}\n\n` +
+		`此操作不可撤销，是否继续？`,
+	);
+	if (!confirmed) return;
+
+	if (isHighRisk) {
+		const doubleConfirmed = window.confirm(
+			`【高风险操作二次确认】\n\n` +
+			`您即将执行高风险操作「${proposal.label}」。\n\n` +
+			`影响范围：${proposal.sideEffects.join("、")}\n` +
+			`审计要求：此操作会在操作日志中留痕，并关联当前用户身份。\n` +
+			`责任声明：执行后不可回退，后果由当前登录用户承担。\n\n` +
+			`请再次确认是否执行？`,
+		);
+		if (!doubleConfirmed) {
+			showToast("已取消高风险操作", "info");
+			return;
+		}
+	}
+
+	try {
+		showToast(`正在执行「${proposal.label}」…`, "info");
+		await apiClient.call(proposal.operationId, apiParams);
+		showToast(`「${proposal.label}」执行成功`, "success");
+		await refreshData();
+	} catch (error) {
+		showToast(`操作失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
+	}
+}
+
 export function renderActionProposal(): TemplateResult {
 	const proposal = getCurrentAnalysis().actionProposal;
 	return html`
@@ -106,11 +217,267 @@ export function renderActionProposal(): TemplateResult {
 					<dd>${proposal.evidenceRequired ? `需要业务依据，当前 ${proposal.evidenceCount} 条` : "不强制要求依据"}</dd>
 				</dl>
 				<div class="sub">提交后影响：${proposal.sideEffects.join("、")}</div>
+				${proposal.affectedCount !== undefined ? html`<div class="sub">影响对象：${proposal.affectedLabel} × ${proposal.affectedCount}</div>` : ""}
 				<div class="sub">留痕要求：${proposal.auditRequired ? "需要记录操作日志" : "不强制记录操作日志"}；高风险事项必须等待人工确认。</div>
 				<div style="margin-top: 12px">
-					<button class="btn primary">${icon("check")} 确认办理草案</button>
-					<button class="btn">${icon("eye")} 查看依据</button>
+					<button class="btn primary" ?disabled=${!proposal.canExecute || !proposal.operationId} @click=${handleConfirmAction}>${icon("check")} 确认办理草案</button>
+					<button class="btn" @click=${() => setActiveAgentPanelTab("evidence")}>${icon("eye")} 查看依据</button>
 				</div>
+			</div>
+		</div>
+	`;
+}
+
+async function handleCreateUnit(): Promise<void> {
+	const data = requireData();
+	const projectId = data.selectedProject?.id;
+	if (!projectId) { showToast("请先选择项目", "error"); return; }
+
+	const result = await showModal("创建单位工程", [
+		{ label: "单位工程名称", key: "name", type: "text", required: true, placeholder: "如：1#楼" },
+		{ label: "工程类型", key: "engType", type: "text", placeholder: "如：房屋建筑工程" },
+		{ label: "结构类型", key: "structureType", type: "text", placeholder: "如：框架结构" },
+		{ label: "层数", key: "floors", type: "number", placeholder: "如：18" },
+		{ label: "建筑面积（㎡）", key: "buildingArea", type: "number", placeholder: "如：3500" },
+	], "创建");
+
+	if (!result) return;
+	try {
+		showToast("正在创建单位工程…", "info");
+		const body: Record<string, unknown> = { name: result.name };
+		if (result.engType) body.engType = result.engType;
+		if (result.structureType) body.structureType = result.structureType;
+		if (result.floors) body.floors = Number(result.floors);
+		if (result.buildingArea) body.buildingArea = Number(result.buildingArea);
+		await apiClient.call("createUnit", { pathParams: { projectId }, body });
+		showToast("单位工程创建成功", "success");
+		await refreshData();
+	} catch (error) {
+		showToast(`创建失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
+	}
+}
+
+async function handleCreateProject(): Promise<void> {
+	const result = await showModal("创建项目", [
+		{ label: "项目名称", key: "name", type: "text", required: true, placeholder: "如：XX小区建设工程" },
+		{ label: "项目类型", key: "type", type: "text", required: true, placeholder: "如：房屋建筑工程" },
+		{ label: "项目编号", key: "code", type: "text", placeholder: "如：GC-2026-001" },
+		{ label: "建设单位", key: "buildingUnit", type: "text", required: true, placeholder: "如：XX房地产开发有限公司" },
+		{ label: "施工单位", key: "constructionUnit", type: "text", placeholder: "如：XX建设集团有限公司" },
+		{ label: "监理单位", key: "supervisionUnit", type: "text", placeholder: "如：XX工程监理有限公司" },
+		{ label: "设计单位", key: "designUnit", type: "text", placeholder: "如：XX建筑设计院" },
+		{ label: "项目地点", key: "location", type: "text", placeholder: "如：XX省XX市XX区" },
+		{ label: "开工日期", key: "startDate", type: "text", placeholder: "如：2026-01-01" },
+		{ label: "竣工日期", key: "endDate", type: "text", placeholder: "如：2028-12-31" },
+		{ label: "建筑面积（㎡）", key: "totalArea", type: "number", placeholder: "如：50000" },
+		{ label: "备注", key: "description", type: "textarea", placeholder: "项目描述" },
+	], "创建项目");
+
+	if (!result) return;
+	try {
+		showToast("正在创建项目…", "info");
+		const body: Record<string, unknown> = {
+			name: result.name,
+			type: result.type,
+			buildingUnit: result.buildingUnit,
+		};
+		if (result.code) body.code = result.code;
+		if (result.constructionUnit) body.constructionUnit = result.constructionUnit;
+		if (result.supervisionUnit) body.supervisionUnit = result.supervisionUnit;
+		if (result.designUnit) body.designUnit = result.designUnit;
+		if (result.location) body.location = result.location;
+		if (result.startDate) body.startDate = result.startDate;
+		if (result.endDate) body.endDate = result.endDate;
+		if (result.totalArea) body.totalArea = Number(result.totalArea);
+		if (result.description) body.description = result.description;
+		await apiClient.call("createProject", { body });
+		showToast("项目创建成功", "success");
+		await refreshData();
+	} catch (error) {
+		showToast(`创建失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
+	}
+}
+
+async function handleCopyAccessCode(): Promise<void> {
+	const code = requireData().accessCode;
+	if (!code?.accessCode) { showToast("暂无接入码", "error"); return; }
+	try {
+		await navigator.clipboard.writeText(code.accessCode);
+		showToast("接入码已复制", "success");
+	} catch {
+		showToast("复制失败，请手动复制", "error");
+	}
+}
+
+async function handleResetAccessCode(): Promise<void> {
+	const data = requireData();
+	const projectId = data.selectedProject?.id;
+	if (!projectId) return;
+	if (!window.confirm("重置接入码后，原接入码立即失效。确认重置？")) return;
+	try {
+		showToast("正在重置接入码…", "info");
+		await apiClient.call("resetProjectAccessPassword", { pathParams: { projectId } });
+		showToast("接入码已重置", "success");
+		await refreshData();
+	} catch (error) {
+		showToast(`重置失败：${error instanceof Error ? error.message : "未知错误"}`, "error");
+	}
+}
+
+export function renderCockpitWorkspace(): TemplateResult {
+	const data = requireData();
+	const project = data.selectedProject;
+
+	if (!project) {
+		return html`
+			${renderMetrics()}
+			${renderEmptyProject()}
+		`;
+	}
+
+	return html`
+		${renderMetrics()}
+		<div class="section grid cols-2">
+			${renderProjectDetail(project)}
+			<div>
+				${renderUnitsSection(data.units)}
+				${renderMembersSection(data.members)}
+			</div>
+		</div>
+		<div class="section grid cols-2">
+			${renderAccessCodeSection(data.accessCode)}
+		</div>
+		${renderLifecycle()}
+		<div class="section grid cols-2">
+			${renderIssueTable()}
+			${renderActionProposal()}
+		</div>
+	`;
+}
+
+function renderEmptyProject(): TemplateResult {
+	return html`
+		<div class="section grid cols-2">
+			<div class="card pad">
+				<div class="agent-card-title">${icon("building-2")} 尚未选择项目</div>
+				<div class="sub">当前租户下 ${requireData().projects.length} 个项目。</div>
+				<div style="margin-top: 12px">
+					<button class="btn primary" @click=${handleCreateProject}>${icon("plus")} 创建项目</button>
+					<button class="btn" @click=${() => setActiveAgentPanelTab("actions")}>${icon("sparkles")} 咨询智能体</button>
+				</div>
+			</div>
+			<div>${renderIssueTable()}</div>
+		</div>
+	`;
+}
+
+function renderProjectDetail(project: import("./archive-api.js").Project): TemplateResult {
+	return html`
+		<div class="card pad">
+			<div class="section-head">
+				<h2>项目信息</h2>
+				<span class="badge ${project.status === "project_archive" ? "green" : "amber"}">${statusLabel(project.status)}</span>
+			</div>
+			<dl class="kv">
+				<dt>项目名称</dt>
+				<dd>${project.name}</dd>
+				<dt>项目编号</dt>
+				<dd>${project.code || "未设置"}</dd>
+				<dt>项目类型</dt>
+				<dd>${project.type || "未分类"}</dd>
+				<dt>建筑面积</dt>
+				<dd>${project.totalArea ? `${project.totalArea} ㎡` : "未设置"}</dd>
+				<dt>项目地点</dt>
+				<dd>${project.location || "未设置"}</dd>
+				<dt>建设单位</dt>
+				<dd>${project.buildingUnit || "未指定"}</dd>
+				<dt>施工单位</dt>
+				<dd>${project.constructionUnit || "未指定"}</dd>
+				<dt>监理单位</dt>
+				<dd>${project.supervisionUnit || "未指定"}</dd>
+				<dt>设计单位</dt>
+				<dd>${project.designUnit || "未指定"}</dd>
+				<dt>开工日期</dt>
+				<dd>${formatDate(project.startDate)}</dd>
+				<dt>竣工日期</dt>
+				<dd>${formatDate(project.endDate)}</dd>
+			</dl>
+			${project.description ? html`<div class="sub" style="margin-top:4px">备注：${project.description}</div>` : ""}
+		</div>
+	`;
+}
+
+function renderUnitsSection(units: import("./archive-api.js").Unit[]): TemplateResult {
+	return html`
+		<div class="card" style="margin-bottom:12px">
+			<div class="section-head" style="padding:14px 14px 0">
+				<h2>单位工程</h2>
+				<span class="badge blue">${units.length} 个</span>
+			</div>
+			${units.length === 0
+				? renderEmptyState("暂无单位工程")
+				: html`
+					<table class="table" style="border:0;border-radius:0;margin-top:4px">
+						<tr><th>名称</th><th>类型</th><th>结构</th><th>层数</th><th>面积</th></tr>
+						${units.map((u) => html`
+							<tr>
+								<td><strong>${u.name}</strong></td>
+								<td>${u.engType || "-"}</td>
+								<td>${u.structureType || "-"}</td>
+								<td>${u.floors ?? "-"}</td>
+								<td>${u.buildingArea ? `${u.buildingArea}㎡` : "-"}</td>
+							</tr>
+						`)}
+					</table>
+				`}
+			<div style="padding:10px 14px;border-top:1px solid #d9ded8">
+				<button class="btn primary" @click=${handleCreateUnit}>${icon("plus")} 创建单位工程</button>
+			</div>
+		</div>
+	`;
+}
+
+function renderMembersSection(members: import("./archive-api.js").ProjectMemberRecord[]): TemplateResult {
+	return html`
+		<div class="card">
+			<div class="section-head" style="padding:14px 14px 0">
+				<h2>项目成员</h2>
+				<span class="badge blue">${members.length} 人</span>
+			</div>
+			${members.length === 0
+				? renderEmptyState("暂无项目成员")
+				: html`
+					<table class="table" style="border:0;border-radius:0;margin-top:4px">
+						<tr><th>姓名</th><th>角色</th></tr>
+						${members.map((m) => html`
+							<tr>
+								<td><strong>${m.userName ?? `成员 #${m.userId ?? m.id}`}</strong></td>
+								<td><span class="badge blue">${roleLabel(m.role)}</span></td>
+							</tr>
+						`)}
+					</table>
+				`}
+		</div>
+	`;
+}
+
+function renderAccessCodeSection(accessCode?: import("./archive-api.js").AccessCodeInfo): TemplateResult {
+	if (!accessCode) return html``;
+	return html`
+		<div class="card pad">
+			<div class="section-head">
+				<h2>项目接入码</h2>
+				<span class="badge blue">邀请成员</span>
+			</div>
+			<dl class="kv">
+				<dt>接入码</dt>
+				<dd style="font-family:monospace;font-size:16px;letter-spacing:2px;user-select:all">${accessCode.accessCode}</dd>
+				<dt>创建时间</dt>
+				<dd>${formatDate(accessCode.createdAt)}</dd>
+			</dl>
+			<div style="margin-top:12px;display:flex;gap:8px">
+				<button class="btn primary" @click=${handleCopyAccessCode}>${icon("copy")} 复制接入码</button>
+				<button class="btn" @click=${handleResetAccessCode}>${icon("rotate-ccw")} 重置</button>
 			</div>
 		</div>
 	`;

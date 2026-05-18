@@ -1,9 +1,10 @@
 import { html, type TemplateResult } from "lit";
-import { activeWorkspaceId, appState, refreshData, setActiveWorkspace } from "./app-state.js";
+import { activeWorkspaceId, appState, refreshData, setActiveAgentPanelTab, setActiveWorkspace } from "./app-state.js";
 import { statusLabel } from "./labels.js";
 import { icon } from "./render-utils.js";
 import {
 	renderArchiveWorkspace,
+	renderCockpitWorkspace,
 	renderCompileWorkspace,
 	renderGenericWorkspace,
 	renderGovernanceWorkspace,
@@ -101,6 +102,7 @@ export function renderError(): TemplateResult {
 }
 
 function renderWorkspaceBody(): TemplateResult {
+	if (activeWorkspaceId === "cockpit") return renderCockpitWorkspace();
 	if (activeWorkspaceId === "intake") return renderIntakeWorkspace();
 	if (activeWorkspaceId === "compile") return renderCompileWorkspace();
 	if (activeWorkspaceId === "review") return renderReviewWorkspace();
@@ -126,11 +128,59 @@ export function renderMain(): TemplateResult {
 					</div>
 					<div>
 						<button class="btn" @click=${() => void refreshData()}>${icon("refresh-cw")} 刷新</button>
-						<button class="btn primary">${icon("play-circle")} 生成办理建议</button>
+						<button class="btn primary" @click=${() => setActiveAgentPanelTab("actions")}>${icon("play-circle")} 生成办理建议</button>
 					</div>
 				</div>
 				${renderWorkspaceBody()}
 			</section>
 		</main>
+	`;
+}
+
+export function renderMobileHeader(): TemplateResult {
+	const project = appState.data?.selectedProject;
+	return html`
+		<div class="mobile-header-inner">
+			<div class="brand">
+				<div class="brand-mark">${icon("archive")}</div>
+				<span>工程档案智能体</span>
+			</div>
+			<div class="mobile-project">
+				${icon("building-2")}
+				<strong>${project?.name ?? "未选择项目"}</strong>
+				<span class="badge ${project?.status === "project_archive" ? "green" : "amber"}">${project?.status ? statusLabel(project.status) : "无项目"}</span>
+			</div>
+			<div class="mobile-header-actions">
+				<button class="icon-btn" title="刷新" @click=${() => void refreshData()}>${icon("refresh-cw")}</button>
+				<button class="icon-btn" title="审计">${icon("shield-check")}</button>
+			</div>
+		</div>
+	`;
+}
+
+export function renderMobileBottomNav(): TemplateResult {
+	return html`
+		<nav class="mobile-nav-inner">
+			${workspaces
+				.filter((w) => w.id !== "governance")
+				.map((w) => html`
+					<button
+						class="mobile-nav-btn ${w.id === activeWorkspaceId ? "active" : ""}"
+						@click=${() => setActiveWorkspace(w.id)}
+						title=${w.label}
+					>
+						${icon(w.icon)}
+						<span>${w.label}</span>
+					</button>
+				`)}
+			<button
+				class="mobile-nav-btn ${"governance" === activeWorkspaceId ? "active" : ""}"
+				@click=${() => setActiveWorkspace("governance")}
+				title="权限审计"
+			>
+				${icon("fingerprint")}
+				<span>审计</span>
+			</button>
+		</nav>
 	`;
 }
