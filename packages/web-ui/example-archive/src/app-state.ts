@@ -9,9 +9,12 @@ import {
 	SettingsStore,
 	setAppStorage,
 } from "@earendil-works/pi-web-ui";
-import type { ArchiveDashboardData } from "./archive-api.js";
+import type { ArchiveDashboardData, ProjectMemberRecord } from "./archive-api.js";
 import { createApiClient, loadArchiveDashboardData } from "./archive-api.js";
+import { loadAuthContext } from "./auth-service.js";
+import type { AuthContext, ProjectMemberInfo } from "./auth-types.js";
 import { analyzeArchiveWorkspace, analyzeEmptyWorkspace, type ArchiveOntologyAnalysis } from "./archive-ontology-analysis.js";
+import { ontologyManifest, ontologyRuntime } from "./ontology-runtime.js";
 import { loadConfig } from "./config.js";
 import { getWorkspace, type WorkspaceId } from "./workspace-definitions.js";
 
@@ -20,6 +23,7 @@ type LoadState = "loading" | "ready" | "error";
 export interface AppState {
 	loadState: LoadState;
 	authMessage?: string;
+	authContext?: AuthContext;
 	error?: string;
 	data?: ArchiveDashboardData;
 }
@@ -67,13 +71,13 @@ export function requireData(): ArchiveDashboardData {
 }
 
 export function getCurrentAnalysis(): ArchiveOntologyAnalysis {
-	return analyzeArchiveWorkspace(activeWorkspaceId, requireData());
+	return analyzeArchiveWorkspace(activeWorkspaceId, requireData(), appState.authContext);
 }
 
 export function getArchiveAgentSnapshot() {
 	const workspace = getWorkspace(activeWorkspaceId);
 	const data = appState.data;
-	const analysis = data ? analyzeArchiveWorkspace(activeWorkspaceId, data) : analyzeEmptyWorkspace(activeWorkspaceId);
+	const analysis = data ? analyzeArchiveWorkspace(activeWorkspaceId, data, appState.authContext) : analyzeEmptyWorkspace(activeWorkspaceId);
 
 	return {
 		workspace: {
@@ -106,15 +110,38 @@ export function getArchiveAgentSnapshot() {
 		actionProposal: analysis.actionProposal,
 		counts: analysis.counts,
 		apiErrors: analysis.apiErrors,
+		userAuth: appState.authContext
+			? {
+				systemRole: appState.authContext.systemRole,
+				projectRole: appState.authContext.currentProjectMember?.role,
+				userName: appState.authContext.user.name,
+				availableActions: Object.values(ontologyManifest.policies).map((policy) => {
+					const canExecute = ontologyRuntime.canExecuteAction(
+						{ systemRole: appState.authContext!.systemRole, projectRole: appState.authContext!.currentProjectMember?.role },
+						policy,
+					);
+					return {
+						actionType: policy.actionType,
+						label: ontologyManifest.actionTypes[policy.actionType]?.label ?? policy.actionType,
+						canExecute,
+						requiredRole: policy.requiredRole,
+						requiredProjectRole: policy.requiredProjectRole,
+					};
+				}),
+			  }
+			: undefined,
 	};
 }
 
 export function buildArchiveAgentSystemPrompt(): string {
 	const workspace = getWorkspace(activeWorkspaceId);
+	const roleConstraint = appState.authContext
+		? `当前用户角色：${appState.authContext.systemRole}${appState.authContext.currentProjectMember ? `（项目角色：${appState.authContext.currentProjectMember.role}）` : ""}。只能向用户提议其有权执行的动作。`
+		: "";
 	return `你是工程档案全生命周期管理系统的生产级业务智能体，不是自由聊天助手。
 
 当前右侧身份：${workspace.agentName}（${workspace.agentKind}）。
-
+${roleConstraint}
 工作原则：
 - 本体是领域知识字典，显式定义对象、关系、动作、策略、证据和生命周期；回答必须基于本体和真实后端数据。
 - 涉及项目、资料、上传文件、审核、签章、预检、归档包、采集项时，先调用 archive_context 获取本体推导后的当前上下文。
@@ -151,9 +178,22 @@ export async function refreshData(): Promise<void> {
 	onStateChanged?.();
 	try {
 		await apiClient.login();
+		const authContext = await loadAuthContext(apiClient);
 		const projectId = getProjectIdFromUrl();
 		const data = await loadArchiveDashboardData(apiClient, projectId);
-		appState = { loadState: "ready", authMessage: apiClient.getAuthStatus().message, data };
+		let currentProjectMember: ProjectMemberInfo | undefined;
+		if (authContext && data.selectedProject) {
+			const member = data.members.find((m: { userId?: number }) => m.userId === authContext.user.id);
+			if (member) {
+				currentProjectMember = { userId: member.userId!, projectId: data.selectedProject.id, role: member.role };
+			}
+		}
+		appState = {
+			loadState: "ready",
+			authMessage: apiClient.getAuthStatus().message,
+			authContext: authContext ? { ...authContext, currentProjectMember } : undefined,
+			data,
+		};
 		if (archiveAgent) archiveAgent.state.systemPrompt = buildArchiveAgentSystemPrompt();
 	} catch (error) {
 		appState = {
