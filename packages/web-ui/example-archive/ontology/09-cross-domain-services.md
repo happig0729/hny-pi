@@ -32,9 +32,9 @@ nav:
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/form-fill/defaults` | GET | 获取项目级表单默认值 |
-| `/form-fill/suggestions` | GET | 基于部分数据生成字段建议 |
-| `/form-fill/history` | GET | 查询历史填写记录 |
+| `/form-fill/project/{projectId}/defaults` | GET | 获取项目级表单默认值 |
+| `/form-fill/suggest` | POST | 基于文件内容和分类生成字段建议 |
+| `/form-fill/history` | POST | 查询历史填写记录 |
 | `/form-fill/infer` | POST | AI 推断缺失字段 |
 | `/form-fill/batch` | POST | 批量填充多节点表单 |
 

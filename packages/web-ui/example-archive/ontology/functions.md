@@ -7,7 +7,7 @@ tags:
   - ontology
   - functions
   - archive-manager
-source: "../../lib/api-spec/openapi.yaml"
+source: "../api-spec/openapi.yaml"
 ---
 
 ## Functions（函数）
@@ -136,31 +136,31 @@ aiTestConnection(config?) → { success: boolean, latency: number, message: stri
 三层填充策略：AI 推断 > 历史记录建议 > 项目默认值。
 
 ```
-getFormFillDefaults(projectId, nodeId) → { defaults: Record<string, unknown> }
+getFormFillDefaults(projectId) → { defaults: Record<string, unknown> }
 ```
 
-获取项目级别的表单默认值，基于项目类型和模板节点配置。对应 `GET /form-fill/defaults`。
+获取项目级别的表单默认值，基于项目类型和模板节点配置。对应 `GET /form-fill/project/{projectId}/defaults`。
 
 ```
-getFormFillSuggestions(projectId, nodeId, partialData?) → { suggestions: FieldSuggestion[] }
+getFormFillSuggestions(projectId, fileContent?, category?) → { suggestions: FieldSuggestion[] }
 ```
 
-基于已填写部分数据和历史记录生成字段建议。对应 `GET /form-fill/suggestions`。
+基于文件内容、分类和历史记录生成字段建议。对应 `POST /form-fill/suggest`。
 
 ```
-getFormFillHistory(projectId, nodeId, limit?) → { records: HistoricalRecord[] }
+getFormFillHistory(projectId, category?, minConfidence?) → { records: HistoricalRecord[] }
 ```
 
-获取同一项目下相同节点类型的历史填写记录，按时间倒序。对应 `GET /form-fill/history`。
+获取同一项目下同类资料的历史填写记录，按置信度过滤。对应 `POST /form-fill/history`。
 
 ```
-inferFormFillFields(projectId, nodeId, partialData) → { inferred: Record<string, unknown>, confidence: Record<string, number> }
+inferFormFillFields(fileContent) → { inferred: Record<string, unknown>, confidence: Record<string, number> }
 ```
 
 调用 AI 推断缺失字段值，返回推断结果及置信度。对应 `POST /form-fill/infer`。
 
 ```
-batchFormFill(projectId, items: { nodeId, data }[]) → { results: { nodeId, filled: boolean, data: Record<string, unknown> }[] }
+batchFormFill(projectId, files[]) → { results: Array<{ fileId, suggestions }> }
 ```
 
 批量填充多个节点的表单数据，每个节点独立执行三层填充策略。对应 `POST /form-fill/batch`。
@@ -290,9 +290,9 @@ getFilePreview(fileId) → { fileName, title, mimeType, fileUrl, extractedText, 
 | aiGetFileTypes | Application | file type catalog | GET /ai/classify/file-types |
 | aiChat | Agent / UI | SSE stream | POST /ai/chat |
 | aiTestConnection | User config | test result | POST /ai/test |
-| getFormFillDefaults | Action / UI | form defaults | GET /form-fill/defaults |
-| getFormFillSuggestions | Action / UI | field suggestions | GET /form-fill/suggestions |
-| getFormFillHistory | Action / UI | historical records | GET /form-fill/history |
+| getFormFillDefaults | Action / UI | form defaults | GET /form-fill/project/{projectId}/defaults |
+| getFormFillSuggestions | Action / UI | field suggestions | POST /form-fill/suggest |
+| getFormFillHistory | Action / UI | historical records | POST /form-fill/history |
 | inferFormFillFields | Action / UI | inferred fields + confidence | POST /form-fill/infer |
 | batchFormFill | Action / UI | batch fill results | POST /form-fill/batch |
 | parseFile | Action (internal) | extracted text + metadata | (上传后自动触发) |

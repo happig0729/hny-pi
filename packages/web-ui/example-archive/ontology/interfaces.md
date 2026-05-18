@@ -7,7 +7,7 @@ tags:
   - ontology
   - interfaces
   - archive-manager
-source: "../../lib/api-spec/openapi.yaml"
+source: "../api-spec/openapi.yaml"
 ---
 
 ## Interfaces（接口）

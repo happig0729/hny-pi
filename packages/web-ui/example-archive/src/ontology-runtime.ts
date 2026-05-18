@@ -1,5 +1,31 @@
 export type ConfirmationLevel = "none" | "low" | "medium" | "high";
 
+export type OntologyObjectType =
+	| "Project"
+	| "Unit"
+	| "CatalogTemplateNode"
+	| "CityArchiveCatalogNode"
+	| "CompilationInstance"
+	| "Document"
+	| "UploadFile"
+	| "UploadFileVersion"
+	| "Review"
+	| "SigningTask"
+	| "SigningNode"
+	| "CompliancePrecheck"
+	| "ArchivePackage"
+	| "CollectedItem";
+
+export type OntologyActionType =
+	| "createProject"
+	| "archiveProject"
+	| "bulkSubmitUploadFiles"
+	| "updateCompilationFormData"
+	| "rejectReview"
+	| "createSigningTask"
+	| "runPrecheck"
+	| "packageProject";
+
 export type EvidenceSourceType =
 	| "api"
 	| "file_text"
@@ -10,7 +36,7 @@ export type EvidenceSourceType =
 	| "ai_inference";
 
 export interface ObjectTypeDefinition {
-	name: string;
+	name: OntologyObjectType;
 	label: string;
 	domain: string;
 	description: string;
@@ -20,14 +46,14 @@ export interface ObjectTypeDefinition {
 
 export interface LinkTypeDefinition {
 	name: string;
-	source: string;
-	target: string;
+	source: OntologyObjectType;
+	target: OntologyObjectType;
 	cardinality: string;
 	description: string;
 }
 
 export interface ActionTypeDefinition {
-	name: string;
+	name: OntologyActionType;
 	label: string;
 	domain: string;
 	operationId?: string;
@@ -54,8 +80,8 @@ export interface LifecycleStageDefinition {
 	id: LifecycleStage;
 	label: string;
 	description: string;
-	objectTypes: string[];
-	recommendedActions: string[];
+	objectTypes: OntologyObjectType[];
+	recommendedActions: OntologyActionType[];
 }
 
 export interface LifecycleGraph {
@@ -63,7 +89,7 @@ export interface LifecycleGraph {
 }
 
 export interface ActionPolicy {
-	actionType: string;
+	actionType: OntologyActionType;
 	operationId?: string;
 	requiredRole: string;
 	requiredProjectRole?: string;
@@ -77,7 +103,7 @@ export interface ActionPolicy {
 export interface EvidenceRef {
 	id: string;
 	sourceType: EvidenceSourceType;
-	objectType?: string;
+	objectType?: OntologyObjectType;
 	objectId?: string | number;
 	field?: string;
 	excerpt?: string;
@@ -86,13 +112,13 @@ export interface EvidenceRef {
 }
 
 export interface OntologyManifest {
-	objectTypes: Record<string, ObjectTypeDefinition>;
+	objectTypes: Record<OntologyObjectType, ObjectTypeDefinition>;
 	linkTypes: Record<string, LinkTypeDefinition>;
-	actionTypes: Record<string, ActionTypeDefinition>;
+	actionTypes: Record<OntologyActionType, ActionTypeDefinition>;
 	functions: Record<string, FunctionDefinition>;
 	interfaces: Record<string, InterfaceDefinition>;
 	lifecycle: LifecycleGraph;
-	policies: Record<string, ActionPolicy>;
+	policies: Record<OntologyActionType, ActionPolicy>;
 }
 
 export interface UserContext {
@@ -116,7 +142,7 @@ export interface AgentOutputDraft {
 	kind: "fact" | "inference" | "suggestion" | "action";
 	text: string;
 	evidenceRefs: EvidenceRef[];
-	actionType?: string;
+	actionType?: OntologyActionType;
 }
 
 export type LifecycleStage =
@@ -131,6 +157,8 @@ export type LifecycleStage =
 	| "collection"
 	| "archived";
 
+// Runtime subset used by the example archive workbench. The full semantic model
+// lives under ontology/ and OpenAPI remains the backend capability source.
 export const ontologyManifest: OntologyManifest = {
 	objectTypes: {
 		Project: {
@@ -591,19 +619,19 @@ const projectRoleRank: Record<string, number> = {
 export class OntologyRuntime {
 	constructor(private readonly manifest: OntologyManifest) {}
 
-	getObjectDefinition(type: string): ObjectTypeDefinition | undefined {
+	getObjectDefinition(type: OntologyObjectType): ObjectTypeDefinition {
 		return this.manifest.objectTypes[type];
 	}
 
-	getLinksForObject(type: string): LinkTypeDefinition[] {
+	getLinksForObject(type: OntologyObjectType): LinkTypeDefinition[] {
 		return Object.values(this.manifest.linkTypes).filter((link) => link.source === type || link.target === type);
 	}
 
-	getActionPolicy(actionType: string): ActionPolicy | undefined {
+	getActionPolicy(actionType: OntologyActionType): ActionPolicy {
 		return this.manifest.policies[actionType];
 	}
 
-	bindOperation(actionType: string): string | undefined {
+	bindOperation(actionType: OntologyActionType): string | undefined {
 		return this.manifest.policies[actionType]?.operationId ?? this.manifest.actionTypes[actionType]?.operationId;
 	}
 
@@ -620,7 +648,7 @@ export class OntologyRuntime {
 		return "setup";
 	}
 
-	filterActionsByPermission(userContext: UserContext, actionTypes: string[]): ActionPolicy[] {
+	filterActionsByPermission(userContext: UserContext, actionTypes: OntologyActionType[]): ActionPolicy[] {
 		return actionTypes
 			.map((actionType) => this.getActionPolicy(actionType))
 			.filter((policy): policy is ActionPolicy => Boolean(policy))
@@ -641,8 +669,9 @@ export class OntologyRuntime {
 
 	requireEvidence(output: AgentOutputDraft): boolean {
 		if (output.kind !== "action") return true;
-		const policy = output.actionType ? this.getActionPolicy(output.actionType) : undefined;
-		if (!policy?.evidenceRequired) return true;
+		if (!output.actionType) return true;
+		const policy = this.getActionPolicy(output.actionType);
+		if (!policy.evidenceRequired) return true;
 		return output.evidenceRefs.length > 0;
 	}
 }

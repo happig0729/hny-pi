@@ -1,14 +1,18 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type Static, Type } from "typebox";
-import type { ApiCallOptions, ApiClient } from "./archive-api.js";
+import type { ApiCallOptions, ApiClient, Project } from "./archive-api.js";
+import { isReadOnlyOperationId, type ReadOnlyOperationId } from "./archive-operation-policy.js";
+import type { ActionProposalView, IssueView, MetricView } from "./archive-ontology-analysis.js";
+import type { EvidenceRef, LifecycleInferenceContext, LifecycleStage, OntologyActionType } from "./ontology-runtime.js";
+import type { WorkspaceId } from "./workspace-definitions.js";
 
 export interface ArchiveAgentSnapshot {
 	workspace: {
-		id: string;
+		id: WorkspaceId;
 		label: string;
 		agentName: string;
 		agentKind: string;
-		actionType: string;
+		actionType: OntologyActionType;
 		ontologyScope: string[];
 		primaryObjects: string[];
 	};
@@ -16,12 +20,13 @@ export interface ArchiveAgentSnapshot {
 		id: number;
 		name: string;
 		code?: string;
-		status: string;
+		status: Project["status"];
 	};
 	lifecycleStage: {
-		id: string;
+		id: LifecycleStage;
 		label: string;
 	};
+	lifecycleContext: LifecycleInferenceContext;
 	loadState: string;
 	auth: {
 		enabled: boolean;
@@ -29,41 +34,10 @@ export interface ArchiveAgentSnapshot {
 		authenticated: boolean;
 		message?: string;
 	};
-	metrics: Array<{
-		label: string;
-		value: string;
-		description: string;
-		tone: string;
-	}>;
-	issues: Array<{
-		title: string;
-		description: string;
-		severity: string;
-		objectType: string;
-		objectId: string;
-		suggestedAction?: string;
-	}>;
-	evidenceRefs: Array<{
-		id: string;
-		sourceType: string;
-		objectType?: string;
-		objectId?: string | number;
-		field?: string;
-		excerpt?: string;
-		confidence?: number;
-		createdAt: string;
-	}>;
-	actionProposal: {
-		actionType: string;
-		operationId?: string;
-		label: string;
-		confirmationLevel: string;
-		requiredRole: string;
-		requiredProjectRole?: string;
-		sideEffects: string[];
-		evidenceCount: number;
-		canExecute: boolean;
-	};
+	metrics: MetricView[];
+	issues: IssueView[];
+	evidenceRefs: EvidenceRef[];
+	actionProposal: ActionProposalView;
 	counts: {
 		projects: number;
 		units: number;
@@ -84,21 +58,21 @@ export interface ArchiveContextToolDetails {
 }
 
 export interface ArchiveApiReadToolDetails {
-	operationId: string;
+	operationId: ReadOnlyOperationId;
 	response: unknown;
 }
 
 const archiveContextSchema = Type.Object({
 	includeApiErrors: Type.Optional(
-		Type.Boolean({
-			description: "Include current backend loading errors in the context snapshot. Defaults to true.",
+	Type.Boolean({
+			description: "是否在上下文快照中包含当前后端加载错误，默认包含。",
 		}),
 	),
 });
 
 const archiveApiReadSchema = Type.Object({
 	operationId: Type.String({
-		description: "Read-only backend operationId. Use archive_context first when you only need current page state.",
+		description: "只读后端 operationId。只需要当前页面状态时应先使用 archive_context。",
 	}),
 	pathParams: Type.Optional(Type.Record(Type.String(), Type.Union([Type.String(), Type.Number()]))),
 	query: Type.Optional(Type.Record(Type.String(), Type.Union([Type.String(), Type.Number(), Type.Boolean()]))),
@@ -107,32 +81,12 @@ const archiveApiReadSchema = Type.Object({
 type ArchiveContextParams = Static<typeof archiveContextSchema>;
 type ArchiveApiReadParams = Static<typeof archiveApiReadSchema>;
 
-const READ_ONLY_OPERATION_IDS = new Set([
-	"healthCheck",
-	"listProjects",
-	"getProject",
-	"getProjectStats",
-	"listUnits",
-	"getUnit",
-	"listDocuments",
-	"getDocument",
-	"listUploadFiles",
-	"listCompilationInstances",
-	"listReviews",
-	"listReviewHistory",
-	"listSigningTasks",
-	"getSigningTask",
-	"getLatestPrecheck",
-	"listArchivePackages",
-	"listCollectionItems",
-]);
-
 export function createArchiveContextTool(getSnapshot: () => ArchiveAgentSnapshot): AgentTool<typeof archiveContextSchema, ArchiveContextToolDetails> {
 	return {
 		label: "Archive Context",
 		name: "archive_context",
 		description:
-			"Read the current engineering archive workspace context: selected project, lifecycle stage, metrics, issues, evidence refs, ontology scope, and action proposal. Use this before answering workflow questions.",
+			"读取当前工程档案工作台上下文，包括项目、生命周期阶段、指标、阻塞项、证据、本体范围和动作草案。回答流程问题前先使用此工具。",
 		parameters: archiveContextSchema,
 		execute: async (_toolCallId: string, params: ArchiveContextParams) => {
 			const snapshot = getSnapshot();
@@ -150,11 +104,11 @@ export function createArchiveApiReadTool(apiClient: ApiClient): AgentTool<typeof
 		label: "Archive API Read",
 		name: "archive_api_read",
 		description:
-			"Call approved read-only backend APIs for engineering archive data. This tool cannot create, update, submit, sign, review, package, archive, or delete business objects.",
+			"调用允许的只读后端接口读取工程档案数据。此工具不能创建、更新、提交、签章、审核、打包、归档或删除业务对象。",
 		parameters: archiveApiReadSchema,
 		executionMode: "parallel",
 		execute: async (_toolCallId: string, params: ArchiveApiReadParams, signal?: AbortSignal) => {
-			if (!READ_ONLY_OPERATION_IDS.has(params.operationId)) {
+			if (!isReadOnlyOperationId(params.operationId)) {
 				throw new Error(`Operation ${params.operationId} is not available through archive_api_read because it is not read-only.`);
 			}
 			const options: ApiCallOptions = {

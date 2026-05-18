@@ -7,14 +7,16 @@ tags:
   - ontology
   - action-types
   - archive-manager
-source: "../../lib/api-spec/openapi.yaml"
+source: "../api-spec/openapi.yaml"
 ---
 
 ## Action Types（动作类型）
 
 Action Types 定义 Ontology 上受治理的写操作，是系统状态变更的唯一入口。每个 Action 包含：输入校验、副作用（通知/审计/下游联动）、权限门控。
 
-本文件基于 `openapi.yaml` 中全部 POST/PUT/DELETE 端点映射生成，按业务域组织。
+`openapi.yaml` 是后端真实能力的权威来源，本文件只解释这些 operationId 的业务语义。没有出现在 OpenAPI 中的生命周期动作必须标注为内部语义动作，不得伪装成 API operationId。
+
+本文件基于 `openapi.yaml` 中 POST/PUT/DELETE 端点映射生成，并补充少量内部生命周期语义动作，按业务域组织。
 
 ### 租户管理
 
@@ -35,8 +37,8 @@ Action Types 定义 Ontology 上受治理的写操作，是系统状态变更的
 | updateProject | updateProject | project_admin | projectId, fields | 记录变更日志 |
 | deleteProject | deleteProject | project_admin | projectId | 级联清理关联数据、记录操作日志 |
 | archiveProject | archiveProject | project_admin | projectId | 状态变更为 project_archive、触发归档预检 |
-| lockProject | lockProject | project_admin | projectId | 锁定项目数据、禁止编制与上传 |
-| unlockProject | unlockProject | project_admin | projectId | 解锁项目、恢复编制与上传 |
+| lockProject | (internal lifecycle) | project_admin | projectId | 锁定项目数据、禁止编制与上传；当前无独立 OpenAPI operationId |
+| unlockProject | (internal lifecycle) | project_admin | projectId | 解锁项目、恢复编制与上传；当前无独立 OpenAPI operationId |
 | joinProject | joinProject | any (持接入码) | accessCode, password | 校验接入码与密码、加入 ProjectMember |
 | resetAccessPassword | resetProjectAccessPassword | project_admin | projectId | 重新生成接入密码 |
 | addProjectMember | addProjectMember | project_admin | projectId, userId, role | 检查用户数配额、发送通知 |
@@ -51,8 +53,8 @@ Action Types 定义 Ontology 上受治理的写操作，是系统状态变更的
 | createUnit | createUnit | project_admin | projectId, name, engType... | 初始化默认扩展字段 |
 | updateUnit | updateUnit | project_admin | unitId, fields | 记录变更日志 |
 | deleteUnit | deleteUnit | project_admin | unitId | 清理单体关联数据 |
-| archiveUnit | archiveUnit | project_admin | unitId | 锁定单体、禁止对单体下档案的写操作 |
-| unlockUnit | unlockUnit | project_admin | unitId | 解锁单体、恢复档案操作 |
+| archiveUnit | (internal via UnitExtension) | project_admin | unitId | 通过单位工程扩展字段表达归档状态；当前无独立 OpenAPI operationId |
+| unlockUnit | (internal via UnitExtension) | project_admin | unitId | 通过单位工程扩展字段恢复进行中状态；当前无独立 OpenAPI operationId |
 | updateUnitExtensions | updateUnitExtensions | project_admin | unitId, fields | 更新单体动态扩展字段 |
 
 ### 档案编制
@@ -212,6 +214,8 @@ Action Types 定义 Ontology 上受治理的写操作，是系统状态变更的
 | createTemplateExample | createTemplateExample | tenant_admin | templateId, name, data | 创建模板示例数据 |
 | updateTemplateExample | updateTemplateExample | tenant_admin | exampleId, fields | 更新示例 |
 | deleteTemplateExample | deleteTemplateExample | tenant_admin | exampleId | 删除示例 |
+| updateTemplateInstructions | updateTemplateInstructions | tenant_admin | templateId, content | 更新模板填写说明 |
+| updateTemplateAutofillConfig | updateTemplateAutofillConfig | tenant_admin | templateId, mapping | 更新模板自动填充配置 |
 
 ### 企业模板配置
 
@@ -276,9 +280,9 @@ Action Types 定义 Ontology 上受治理的写操作，是系统状态变更的
 | logout | logout | authenticated | refreshToken (optional) | 销毁 Session（或全部 Session） |
 | refreshToken | refreshToken | any (公开) | refreshToken | 验证有效期、发放新 access token |
 | changePassword | changePassword | authenticated | oldPassword, newPassword | 验证旧密码、更新哈希、销毁旧 Session |
-| createApiKey | (不在 OpenAPI 路径中) | authenticated | name, expiresAt | 生成 key、bcrypt 哈希存储 |
-| revokeApiKey | (不在 OpenAPI 路径中) | authenticated | keyId | 状态 revoked |
-| bindWechat | (不在 OpenAPI 路径中) | authenticated | code | OAuth 换取 openid、创建绑定 |
+| createApiKey | createApiKey | authenticated | name, expiresAt | 生成 key、bcrypt 哈希存储 |
+| revokeApiKey | revokeApiKey | authenticated | keyId | 状态 revoked |
+| bindWechat | wechatBind | authenticated | openid, unionid, nickname | 绑定微信到现有用户 |
 | updateUserPreference | upsertUserPreference | authenticated | key, value | upsert 用户偏好 |
 
 ### 签章流转（用户维度的跨项目签章执行）
@@ -298,7 +302,7 @@ SigningTask:  pending ──► in_progress ──► completed
 
 | Action | API operationId | 触发者 | 输入 | 副作用 |
 |--------|-----------------|--------|------|--------|
-| getFormFillDefaults | getFormFillDefaults | authenticated | projectId | 从项目信息提取 7 个默认字段值（projectName/code/unit 等），confidence=1.0 |
+| getFormFillDefaults | (read — getFormFillDefaults) | authenticated | projectId | 从项目信息提取 7 个默认字段值（projectName/code/unit 等），confidence=1.0；只读函数，不改变状态 |
 | getFormFillSuggestions | getFormFillSuggestions | authenticated | projectId, fileContent?, category? | 三源合并：项目默认值 → 历史频率（minConfidence=0.3）→ AI 推断，返回带 source 标注的建议 |
 | getFormFillHistory | getFormFillHistory | authenticated | projectId, category?, minConfidence | 从 compilationFormDataTable 分析字段值频率 |
 | inferFormFillFields | inferFormFillFields | authenticated | fileContent | 调用用户 AI 配置（GLM 模型），从文件内容提取元数据 |
@@ -348,7 +352,7 @@ SigningTask:  pending ──► in_progress ──► completed
 
 | Action | API operationId | 触发者 | 输入 | 副作用 |
 |--------|-----------------|--------|------|--------|
-| getProjectAccessCode | getProjectAccessCode | project_admin | projectId | 返回解密后的接入码和密码 |
+| getProjectAccessCode | (read — getProjectAccessCode) | project_admin | projectId | 返回解密后的接入码和密码；只读能力，不改变状态 |
 | resetAccessPassword | resetProjectAccessPassword | project_admin | projectId | 重新生成并加密接入密码 |
 | joinProjectByCode | joinProject | any | accessCode, password | 解密+校验接入码和密码，加入 ProjectMember（joinMethod: access_code） |
 
@@ -356,8 +360,8 @@ SigningTask:  pending ──► in_progress ──► completed
 
 | Action | API operationId | 触发者 | 输入 | 副作用 |
 |--------|-----------------|--------|------|--------|
-| archiveUnit | archiveUnit | project_admin | unitId | 通过 unitExtensionsTable 设置 fieldKey='状态' = '已归档'，禁止编制/上传 |
-| unlockUnit | unlockUnit | project_admin | unitId | 设置 fieldKey='状态' = '进行中'，恢复档案操作 |
+| archiveUnit | (internal via UnitExtension) | project_admin | unitId | 通过 unitExtensionsTable 设置 fieldKey='状态' = '已归档'，禁止编制/上传 |
+| unlockUnit | (internal via UnitExtension) | project_admin | unitId | 设置 fieldKey='状态' = '进行中'，恢复档案操作 |
 
 ---
 
@@ -394,4 +398,4 @@ SigningTask:  pending ──► in_progress ──► completed
 | 账号与安全 | 9 | /auth, /wechat |
 | 微信集成 | 3 | /wechat |
 
-**总计: 约 140+ 个 Action Types，覆盖 OpenAPI 全部写操作端点及跨域聚合行为。**
+**总计: 覆盖 OpenAPI 当前 125 个写操作端点，并补充少量内部生命周期语义动作。OpenAPI 中不存在的动作均以 internal 标注。**

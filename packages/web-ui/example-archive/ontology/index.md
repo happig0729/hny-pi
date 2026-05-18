@@ -3,7 +3,7 @@ title: "Archive Manager Ontology — 入口索引"
 modelVersion: "2.0"
 created: 2026-05-16
 updated: 2026-05-17
-source: "../../lib/api-spec/openapi.yaml"
+source: "../api-spec/openapi.yaml"
 tags:
   - ontology
   - archive-manager
@@ -12,7 +12,13 @@ tags:
 
 ## 概述
 
-Archive Manager 本体模型，基于五要素（**Object Types** / **Link Types** / **Action Types** / **Functions** / **Interfaces**），以 `openapi.yaml` 为权威数据源。
+Archive Manager 本体模型，基于五要素（**Object Types** / **Link Types** / **Action Types** / **Functions** / **Interfaces**），以 `openapi.yaml` 为后端真实能力的权威数据源。
+
+三层关系：
+
+- `openapi.yaml`：后端事实源，定义真实 operationId、路径、方法、请求和响应。
+- `ontology/`：语义层，解释 OpenAPI 能力背后的业务对象、关系、动作、函数和治理规则。
+- 前端 Ontology Runtime：当前工作台的可执行子集，只覆盖页面需要推理的对象和动作，不等同于完整本体。
 
 核心业务域：**多租户建设工程档案的全生命周期管理**，覆盖项目立项 → 档案编制 → 审核(批) → 签章 → 归档采集的完整链路。
 
@@ -37,9 +43,8 @@ Archive Manager 本体模型，基于五要素（**Object Types** / **Link Types
 | 文档 | 说明 |
 |------|------|
 | [Link Types](link-types.md) | 65+ 条对象间语义链接关系 |
-| [Action Types](action-types.md) | 110+ 个受治理写操作 |
-| [Functions](functions.md) | 17 个核心服务端函数 |
-| [Interfaces](interfaces.md) | 8 个跨域共享接口 |
+| [Action Types](action-types.md) | OpenAPI 写操作端点映射 + 内部生命周期语义动作 |
+| [Functions](functions.md) | 29 个核心服务端函数 |
+| [Interfaces](interfaces.md) | 11 个跨域共享接口 |
 | [Security & Governance](security-governance.md) | 权限模型、数据隔离、审计日志 |
-
 
