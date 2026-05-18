@@ -15,7 +15,9 @@ export type ReadOnlyOperationId =
 	| "getSigningTask"
 	| "getLatestPrecheck"
 	| "listArchivePackages"
-	| "listCollectionItems";
+	| "listCollectionItems"
+	| "getMe"
+	| "listProjectMembers";
 
 // Agent read access is intentionally narrower than all OpenAPI GET operations.
 // Add an operation here only after it is safe to expose in archive_api_read.
@@ -37,7 +39,9 @@ export const readOnlyOperationIds: ReadonlySet<ReadOnlyOperationId> = new Set<Re
 	"getLatestPrecheck",
 	"listArchivePackages",
 	"listCollectionItems",
-]);
+	"getMe",
+	"listProjectMembers",
+	]);
 
 export function isReadOnlyOperationId(operationId: string): operationId is ReadOnlyOperationId {
 	return readOnlyOperationIds.has(operationId as ReadOnlyOperationId);

@@ -51,6 +51,18 @@ export interface ArchiveAgentSnapshot {
 		apiErrors: number;
 	};
 	apiErrors: string[];
+	userAuth?: {
+		systemRole: string;
+		projectRole?: string;
+		userName: string;
+		availableActions: {
+			actionType: string;
+			label: string;
+			canExecute: boolean;
+			requiredRole: string;
+			requiredProjectRole?: string;
+		}[];
+	};
 }
 
 export interface ArchiveContextToolDetails {
