@@ -7,6 +7,7 @@ export interface ApiClient {
 	login(): Promise<void>;
 	call(operationId: string, options?: ApiCallOptions): Promise<unknown>;
 	getAuthStatus(): AuthStatus;
+	getToken(): string | undefined;
 }
 
 export interface AuthStatus {
@@ -61,6 +62,45 @@ export interface Unit {
 	floors?: number;
 	buildingArea?: number;
 	documentCount?: number;
+	createdAt?: string;
+}
+
+export interface CreateProjectRequest {
+	name: string;
+	code?: string;
+	type: string;
+	buildingUnit: string;
+	constructionUnit?: string;
+	supervisionUnit?: string;
+	designUnit?: string;
+	location?: string;
+	startDate?: string;
+	endDate?: string;
+	totalArea?: number;
+	description?: string;
+}
+
+export interface CreateUnitRequest {
+	name: string;
+	engType?: string;
+	structureType?: string;
+	floors?: number;
+	buildingArea?: number;
+}
+
+export interface AccessCodeInfo {
+	accessCode: string;
+	accessPassword?: string;
+	createdAt?: string;
+	resetAt?: string;
+}
+
+export interface ProjectMemberRecord {
+	id: number;
+	projectId: number;
+	userId?: number;
+	userName?: string;
+	role: "project_admin" | "data_admin" | "data_clerk";
 	createdAt?: string;
 }
 
@@ -190,6 +230,8 @@ export interface ArchiveDashboardData {
 	latestPrecheck?: PrecheckRecord;
 	archivePackages: ArchivePackageRecord[];
 	collectionItems: CollectionItemRecord[];
+	members: ProjectMemberRecord[];
+	accessCode?: AccessCodeInfo;
 	errors: string[];
 }
 
@@ -268,6 +310,9 @@ export function createApiClient(config: AppConfig): ApiClient {
 		getAuthStatus() {
 			return authStatus;
 		},
+		getToken() {
+			return authToken;
+		},
 	};
 }
 
@@ -289,12 +334,14 @@ export async function loadArchiveDashboardData(
 			signingTasks: [],
 			archivePackages: [],
 			collectionItems: [],
+			members: [],
+			accessCode: undefined,
 			errors: projects.length === 0 ? ["后端未返回项目数据"] : [],
 		};
 	}
 
 	const projectId = selectedProject.id;
-	const [stats, units, documents, uploads, compilations, reviews, signingTasks, latestPrecheck, archivePackages, collectionItems] =
+	const [stats, units, documents, uploads, compilations, reviews, signingTasks, latestPrecheck, members, accessCode, archivePackages, collectionItems] =
 		await Promise.all([
 			loadOptional<ProjectStats>(client, "getProjectStats", { pathParams: { projectId } }, "项目统计", errors),
 			loadOptional<Unit[]>(client, "listUnits", { pathParams: { projectId } }, "单位工程", errors),
@@ -304,6 +351,8 @@ export async function loadArchiveDashboardData(
 			loadOptional<ReviewRecord[]>(client, "listReviews", { query: { status: "pending" } }, "审核任务", errors),
 			loadOptional<SigningTaskRecord[]>(client, "listSigningTasks", { query: { projectId } }, "签章任务", errors),
 			loadOptional<PrecheckRecord | undefined>(client, "getLatestPrecheck", { pathParams: { projectId } }, "最新预检", errors),
+			loadOptional<ProjectMemberRecord[]>(client, "listProjectMembers", { pathParams: { projectId } }, "项目成员", errors),
+			loadOptional<AccessCodeInfo>(client, "getProjectAccessCode", { pathParams: { projectId } }, "接入码", errors),
 			loadOptional<ArchivePackageRecord[]>(client, "listArchivePackages", { pathParams: { projectId } }, "归档包", errors),
 			loadOptional<CollectionItemRecord[]>(client, "listCollectionItems", { pathParams: { projectId } }, "采集项", errors),
 		]);
@@ -321,6 +370,8 @@ export async function loadArchiveDashboardData(
 		latestPrecheck,
 		archivePackages: archivePackages ?? [],
 		collectionItems: collectionItems ?? [],
+		members: members ?? [],
+		accessCode,
 		errors,
 	};
 }
