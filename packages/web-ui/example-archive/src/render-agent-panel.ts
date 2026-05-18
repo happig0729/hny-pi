@@ -5,6 +5,7 @@ import { activeAgentPanelTab, activeWorkspaceId, appState, chatPanel, setActiveA
 import { analyzeArchiveWorkspace, analyzeEmptyWorkspace } from "./archive-ontology-analysis.js";
 import { confirmationLabel, evidenceSourceLabel, fieldLabel, issueTone, objectLabel, objectLabelList, roleLabel } from "./labels.js";
 import { icon } from "./render-utils.js";
+import { handleConfirmAction } from "./render-workspaces.js";
 import { getWorkspace, type WorkspaceId } from "./workspace-definitions.js";
 
 export function renderAgentTabs(): TemplateResult {
@@ -114,6 +115,7 @@ function renderAgentEvidenceTab(analysis: ArchiveOntologyAnalysis): TemplateResu
 
 function renderAgentActionsTab(analysis: ArchiveOntologyAnalysis): TemplateResult {
 	const proposal = analysis.actionProposal;
+	const isHighRisk = proposal.confirmationLevel === "high";
 	return html`
 		<div class="agent-workbench">
 			<div class="action-proposal">
@@ -127,6 +129,14 @@ function renderAgentActionsTab(analysis: ArchiveOntologyAnalysis): TemplateResul
 					<div><span>留痕要求</span><strong>${proposal.auditRequired ? "需要记录日志" : "不强制留痕"}</strong></div>
 				</div>
 				<div class="sub">提交后影响：${proposal.sideEffects.join("、")}</div>
+				${proposal.affectedCount !== undefined ? html`<div class="sub">影响对象：${proposal.affectedLabel} × ${proposal.affectedCount}</div>` : ""}
+				${!proposal.userCanExecute ? html`<div class="sub" style="color: var(--archive-red); margin-top: 4px">${icon("lock")} 当前用户无权操作，需要 <strong>${roleLabel(proposal.requiredProjectRole ?? proposal.requiredRole)}</strong> 角色</div>` : ""}
+				${isHighRisk ? html`<div class="sub" style="color: var(--archive-red); margin-top: 4px">${icon("triangle-alert")} 高风险操作，需要二次人工确认。</div>` : ""}
+				<div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap">
+					<button class="btn primary" ?disabled=${!proposal.canExecute || !proposal.operationId} @click=${handleConfirmAction}>${icon("check")} 确认办理草案</button>
+					<button class="btn" @click=${() => setActiveAgentPanelTab("evidence")}>${icon("eye")} 查看依据</button>
+					<button class="btn" @click=${() => { setActiveAgentPanelTab("suggestions"); }}>${icon("sparkles")} 生成办理建议</button>
+				</div>
 			</div>
 		</div>
 	`;

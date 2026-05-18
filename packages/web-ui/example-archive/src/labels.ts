@@ -88,7 +88,9 @@ export function confirmationLabel(level: ConfirmationLevel): string {
 }
 
 export function roleLabel(value?: string): string {
+	if (value === "super_admin") return "超级管理员";
 	if (value === "tenant_admin") return "租户管理员";
+	if (value === "system_admin") return "系统管理员";
 	if (value === "tenant_user") return "平台用户";
 	if (value === "project_admin") return "项目管理员";
 	if (value === "data_admin") return "档案管理员";
