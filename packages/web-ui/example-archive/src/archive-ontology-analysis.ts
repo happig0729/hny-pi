@@ -1,4 +1,5 @@
 import type { ArchiveDashboardData } from "./archive-api.js";
+import type { AuthContext } from "./auth-types.js";
 import {
 	type ActionPolicy,
 	type EvidenceRef,
@@ -6,6 +7,7 @@ import {
 	type LifecycleStage,
 	type OntologyActionType,
 	type OntologyObjectType,
+	type UserContext,
 	ontologyManifest,
 	ontologyRuntime,
 } from "./ontology-runtime.js";
@@ -41,8 +43,11 @@ export interface ActionProposalView {
 	sideEffects: string[];
 	evidenceCount: number;
 	canExecute: boolean;
+	userCanExecute: boolean;
 	evidenceRequired: boolean;
 	auditRequired: boolean;
+	affectedCount?: number;
+	affectedLabel?: string;
 }
 
 export interface ArchiveOntologyAnalysis {
@@ -68,11 +73,14 @@ export interface ArchiveOntologyAnalysis {
 	apiErrors: string[];
 }
 
-export function analyzeArchiveWorkspace(workspaceId: WorkspaceId, data: ArchiveDashboardData): ArchiveOntologyAnalysis {
+export function analyzeArchiveWorkspace(workspaceId: WorkspaceId, data: ArchiveDashboardData, authContext?: AuthContext): ArchiveOntologyAnalysis {
 	const workspace = getWorkspace(workspaceId);
 	const lifecycleContext = buildLifecycleContext(data);
 	const lifecycleStage = ontologyRuntime.inferLifecycleStage(lifecycleContext);
 	const evidenceRefs = getEvidenceRefs(workspaceId, data);
+	const userContext: UserContext | undefined = authContext
+		? { systemRole: authContext.systemRole, projectRole: authContext.currentProjectMember?.role }
+		: undefined;
 
 	return {
 		lifecycleContext,
@@ -81,7 +89,7 @@ export function analyzeArchiveWorkspace(workspaceId: WorkspaceId, data: ArchiveD
 		metrics: getMetrics(workspaceId, data, evidenceRefs.length),
 		issues: getIssues(workspaceId, data),
 		evidenceRefs,
-		actionProposal: buildActionProposal(workspace.actionType, evidenceRefs.length),
+		actionProposal: buildActionProposal(workspace.actionType, evidenceRefs.length, data, userContext),
 		counts: {
 			projects: data.projects.length,
 			units: data.units.length,
@@ -109,7 +117,7 @@ export function analyzeEmptyWorkspace(workspaceId: WorkspaceId): ArchiveOntology
 		metrics: [],
 		issues: [],
 		evidenceRefs: [],
-		actionProposal: buildActionProposal(workspace.actionType, 0),
+		actionProposal: buildActionProposal(workspace.actionType, 0, undefined),
 		counts: {
 			projects: 0,
 			units: 0,
@@ -213,6 +221,32 @@ function getMetrics(workspaceId: WorkspaceId, data: ArchiveDashboardData, eviden
 		];
 	}
 
+	if (workspaceId === "cockpit") {
+		const project = data.selectedProject;
+		if (!project) {
+			return [{ label: "项目数", value: String(data.projects.length), description: "当前租户下的工程项目", tone: data.projects.length > 0 ? "blue" : "amber" }];
+		}
+		const memberCount = data.members.length;
+		const unitCount = data.units.length;
+		return [
+			{
+				label: "项目状态",
+				value: project.status === "project_archive" ? "已归档" : "进行中",
+				description: `${project.name} · ${project.type ?? "未分类"} · ${project.code ?? "无编号"}`,
+				tone: project.status === "project_archive" ? "green" : "blue",
+			},
+			{ label: "单位工程", value: String(unitCount), description: "当前项目关联的单位工程/标段", tone: unitCount > 0 ? "green" : "amber" },
+			{ label: "项目成员", value: String(memberCount), description: "当前项目的团队成员", tone: memberCount > 0 ? "green" : "amber" },
+			{
+				label: "参建单位",
+				value: [project.buildingUnit, project.constructionUnit, project.supervisionUnit, project.designUnit].filter(Boolean).length + " 家",
+				description: [project.buildingUnit && `建设:${project.buildingUnit}`, project.constructionUnit && `施工:${project.constructionUnit}`, project.supervisionUnit && `监理:${project.supervisionUnit}`, project.designUnit && `设计:${project.designUnit}`].filter(Boolean).join("、") || "未配置",
+				tone: (project.buildingUnit || project.constructionUnit) ? "green" : "amber",
+			},
+			{ label: "档案完成率", value: `${data.stats ? Math.round((approvedDocuments / (data.stats.totalDocuments || 1)) * 100) : 0}%`, description: "当前项目档案编制进度", tone: "blue" },
+		];
+	}
+
 	const totalDocuments = data.stats?.totalDocuments ?? data.documents.length;
 	const completion = totalDocuments > 0 ? Math.round((approvedDocuments / totalDocuments) * 100) : 0;
 	return [
@@ -224,6 +258,52 @@ function getMetrics(workspaceId: WorkspaceId, data: ArchiveDashboardData, eviden
 
 function getIssues(workspaceId: WorkspaceId, data: ArchiveDashboardData): IssueView[] {
 	const issues: IssueView[] = [];
+	if (workspaceId === "cockpit") {
+		const project = data.selectedProject;
+		if (project) {
+			if (!project.code) {
+				issues.push({
+					title: "项目缺少编号",
+					description: "项目未设置编号，可能影响档案目录编码。",
+					severity: "info",
+					objectType: "Project",
+					objectId: String(project.id),
+					suggestedAction: "补充编号",
+				});
+			}
+			if (!project.buildingUnit) {
+				issues.push({
+					title: "建设单位未指定",
+					description: "项目缺少建设单位信息，影响工程档案来源认定。",
+					severity: "warning",
+					objectType: "Project",
+					objectId: String(project.id),
+					suggestedAction: "补充建设单位",
+				});
+			}
+			if (data.units.length === 0) {
+				issues.push({
+					title: "尚未创建单位工程",
+					description: "项目还没有单位工程/标段。工程项目必须以单位工程为基本管理单元。",
+					severity: "blocking",
+					objectType: "Project",
+					objectId: String(project.id),
+					suggestedAction: "创建单位工程",
+				});
+			}
+			if (data.members.length === 0) {
+				issues.push({
+					title: "项目尚无成员",
+					description: "没有项目成员。添加成员后才能分配编制、审核、签章等任务。",
+					severity: "warning",
+					objectType: "ProjectMember",
+					objectId: String(project.id),
+					suggestedAction: "邀请成员",
+				});
+			}
+		}
+	}
+
 	if (workspaceId === "intake" || workspaceId === "cockpit") {
 		for (const file of data.uploads.filter((item) => item.status === "pending" || !item.nodeId)) {
 			issues.push({
@@ -333,9 +413,13 @@ function getEvidenceRefs(workspaceId: WorkspaceId, data: ArchiveDashboardData): 
 	return refs;
 }
 
-function buildActionProposal(actionType: OntologyActionType, evidenceCount: number): ActionProposalView {
+function buildActionProposal(actionType: OntologyActionType, evidenceCount: number, data?: ArchiveDashboardData, userContext?: UserContext): ActionProposalView {
 	const action = ontologyManifest.actionTypes[actionType];
 	const policy = ontologyRuntime.getActionPolicy(actionType);
+	const affected = computeAffectedCount(actionType, data);
+	const userCanExecute = userContext
+		? ontologyRuntime.canExecuteAction(userContext, policy)
+		: false;
 
 	return {
 		actionType,
@@ -346,8 +430,51 @@ function buildActionProposal(actionType: OntologyActionType, evidenceCount: numb
 		requiredProjectRole: policy.requiredProjectRole,
 		sideEffects: policy.sideEffects,
 		evidenceCount,
-		canExecute: evidenceCount > 0 || !policy.evidenceRequired,
+		canExecute: userCanExecute && (evidenceCount > 0 || !policy.evidenceRequired),
+		userCanExecute,
 		evidenceRequired: policy.evidenceRequired,
 		auditRequired: policy.auditRequired,
+		affectedCount: affected?.count,
+		affectedLabel: affected?.label,
 	};
+}
+
+interface AffectedCount {
+	count: number;
+	label: string;
+}
+
+function computeAffectedCount(actionType: OntologyActionType, data?: ArchiveDashboardData): AffectedCount | undefined {
+	if (!data) return undefined;
+
+	switch (actionType) {
+		case "bulkSubmitUploadFiles": {
+			const pending = data.uploads.filter((u) => u.status === "pending");
+			return { count: pending.length, label: "待提交文件" };
+		}
+		case "rejectReview": {
+			const pending = data.reviews.filter((r) => r.status === "pending");
+			return { count: pending.length, label: "待审核记录" };
+		}
+		case "runPrecheck":
+			return { count: 1, label: "预检任务" };
+		case "packageProject": {
+			const readyPackages = data.archivePackages.filter((p) => p.status === "ready" || p.status === "generating");
+			return { count: readyPackages.length || 1, label: "归档包" };
+		}
+		case "createSigningTask":
+			return { count: 1, label: "签章任务" };
+		case "updateCompilationFormData": {
+			const drafting = data.compilations.filter((c) => c.status === "drafting");
+			return { count: drafting.length, label: "编制实例" };
+		}
+		case "createProject":
+			return { count: 1, label: "项目" };
+		case "createUnit":
+			return { count: 1, label: "单位工程" };
+		case "archiveProject":
+			return { count: 1, label: "项目" };
+		default:
+			return undefined;
+	}
 }
