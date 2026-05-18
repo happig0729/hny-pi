@@ -185,7 +185,7 @@ export async function refreshData(): Promise<void> {
 		if (authContext && data.selectedProject) {
 			const member = data.members.find((m: { userId?: number }) => m.userId === authContext.user.id);
 			if (member) {
-				currentProjectMember = { userId: member.userId!, projectId: data.selectedProject.id, role: member.role };
+				currentProjectMember = { userId: authContext.user.id, projectId: data.selectedProject.id, role: member.role };
 			}
 		}
 		appState = {

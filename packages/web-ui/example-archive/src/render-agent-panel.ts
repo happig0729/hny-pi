@@ -29,7 +29,7 @@ function renderAgentWorkbench(workspaceId: WorkspaceId, data?: ArchiveDashboardD
 			</div>
 		`;
 	}
-	const analysis = analyzeArchiveWorkspace(workspaceId, data);
+	const analysis = analyzeArchiveWorkspace(workspaceId, data, appState.authContext);
 	if (activeAgentPanelTab === "evidence") return renderAgentEvidenceTab(analysis);
 	if (activeAgentPanelTab === "actions") return renderAgentActionsTab(analysis);
 	return renderAgentSuggestionsTab(analysis);
@@ -145,7 +145,7 @@ function renderAgentActionsTab(analysis: ArchiveOntologyAnalysis): TemplateResul
 export function renderAgentPanel(): TemplateResult {
 	const workspace = getWorkspace(activeWorkspaceId);
 	const data = appState.data;
-	const analysis = data ? analyzeArchiveWorkspace(activeWorkspaceId, data) : analyzeEmptyWorkspace(activeWorkspaceId);
+	const analysis = data ? analyzeArchiveWorkspace(activeWorkspaceId, data, appState.authContext) : analyzeEmptyWorkspace(activeWorkspaceId);
 	return html`
 		<aside class="agent-panel">
 			<div class="agent-head">
