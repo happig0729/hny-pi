@@ -22,6 +22,8 @@ export interface AppState {
 	authMessage?: string;
 	error?: string;
 	data?: ArchiveDashboardData;
+	reportHtml?: string;
+	reportLoading?: boolean;
 }
 
 export const config = loadConfig();
@@ -126,7 +128,17 @@ export function buildArchiveAgentSystemPrompt(): string {
 输出要求：
 - 优先给出结论，再给证据。
 - 使用工程档案业务语言：项目、单位工程、目录节点、资料、文件著录、编制、审核、签章、预检、归档包、采集。
-- 每个建议应说明关联对象、依据、下一步动作和是否需要人工确认。`;
+- 每个建议应说明关联对象、依据、下一步动作和是否需要人工确认。
+
+报表生成能力：
+- 当用户请求涉及"报表"、"报告"、"统计图表"、"数据可视化"、"汇总"、"汇总表"、"分析报告"等语义时，判定为报表生成请求。
+- 生成报表时，必须调用 generate_report 工具，将报表标题和 HTML 内容传入工具参数。
+- HTML 格式要求：
+  1. 只能使用 <div> 标签及其内部内容，不得包含 <!DOCTYPE html>、<html>、<head>、<body> 等文档结构标签
+  2. 可以使用内联 style 属性进行样式设置
+  3. 可以使用 <table>、<tr>、<td>、<th>、<span>、<strong>、<em>、<h1>~<h6>、<p>、<ul>、<ol>、<li>、<svg>、<canvas> 等 HTML 标签
+  4. 报表内容应完整、美观、专业，包含标题、数据表格或图表、摘要说明
+- 不要在聊天文本中直接输出 HTML 代码，所有 HTML 内容必须通过 generate_report 工具提交。`;
 }
 
 let onStateChanged: (() => void) | undefined;
@@ -143,6 +155,16 @@ export function setActiveWorkspace(workspaceId: WorkspaceId): void {
 
 export function setActiveAgentPanelTab(tab: "suggestions" | "evidence" | "actions"): void {
 	activeAgentPanelTab = tab;
+	onStateChanged?.();
+}
+
+export function setReportHtml(html: string | undefined): void {
+	appState = { ...appState, reportHtml: html, reportLoading: false };
+	onStateChanged?.();
+}
+
+export function setReportLoading(loading: boolean): void {
+	appState = { ...appState, reportLoading: loading };
 	onStateChanged?.();
 }
 

@@ -81,6 +81,38 @@ const archiveApiReadSchema = Type.Object({
 type ArchiveContextParams = Static<typeof archiveContextSchema>;
 type ArchiveApiReadParams = Static<typeof archiveApiReadSchema>;
 
+const generateReportSchema = Type.Object({
+	title: Type.String({
+		description: "报表标题",
+	}),
+	html: Type.String({
+		description: "纯 HTML 片段内容，只包含 <div> 及内部标签，不含文档结构标签",
+	}),
+});
+
+type GenerateReportParams = Static<typeof generateReportSchema>;
+
+export interface GenerateReportToolDetails {
+	title: string;
+}
+
+export function createGenerateReportTool(onReport: (html: string) => void): AgentTool<typeof generateReportSchema, GenerateReportToolDetails> {
+	return {
+		label: "Generate Report",
+		name: "generate_report",
+		description:
+			"将生成的报表 HTML 渲染到页面主区域。当用户请求报表、统计图表、数据可视化、汇总表、分析报告时使用此工具。HTML 只能使用 <div> 及内部标签，不得包含 <!DOCTYPE>、<html>、<head>、<body> 等文档结构标签。",
+		parameters: generateReportSchema,
+		execute: async (_toolCallId: string, params: GenerateReportParams) => {
+			onReport(params.html);
+			return {
+				content: [{ type: "text", text: `报表「${params.title}」已生成并渲染到页面主区域。` }],
+				details: { title: params.title },
+			};
+		},
+	};
+}
+
 export function createArchiveContextTool(getSnapshot: () => ArchiveAgentSnapshot): AgentTool<typeof archiveContextSchema, ArchiveContextToolDetails> {
 	return {
 		label: "Archive Context",

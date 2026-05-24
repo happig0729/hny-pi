@@ -1,5 +1,6 @@
 import { html, type TemplateResult } from "lit";
-import { activeWorkspaceId, appState, refreshData, setActiveWorkspace } from "./app-state.js";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
+import { activeWorkspaceId, appState, refreshData, setActiveWorkspace, setReportHtml } from "./app-state.js";
 import { statusLabel } from "./labels.js";
 import { icon } from "./render-utils.js";
 import {
@@ -110,9 +111,38 @@ function renderWorkspaceBody(): TemplateResult {
 	return renderGenericWorkspace();
 }
 
+function renderReportLoading(): TemplateResult {
+	return html`
+		<main class="main">
+			<div class="report-generating">
+				<div class="report-generating-icon">${icon("loader-circle")}</div>
+				<h2>正在生成报表</h2>
+				<div class="sub">智能体正在分析数据并生成报表，请稍候...</div>
+			</div>
+		</main>
+	`;
+}
+
+function renderReportView(): TemplateResult {
+	return html`
+		<main class="main">
+			<div class="report-header">
+				<button class="btn" @click=${() => setReportHtml(undefined)}>
+					${icon("arrow-left")} 返回工作台
+				</button>
+				<h2>智能报表</h2>
+			</div>
+			<div class="report-container">${unsafeHTML(appState.reportHtml ?? "")}</div>
+		</main>
+	`;
+}
+
 export function renderMain(): TemplateResult {
 	if (appState.loadState === "loading") return renderLoading();
 	if (appState.loadState === "error") return renderError();
+
+	if (appState.reportLoading) return renderReportLoading();
+	if (appState.reportHtml) return renderReportView();
 
 	const workspace = getWorkspace(activeWorkspaceId);
 	return html`

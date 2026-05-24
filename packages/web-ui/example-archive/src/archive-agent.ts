@@ -1,7 +1,7 @@
-import { Agent } from "@earendil-works/pi-agent-core";
+import { Agent, type AgentEvent } from "@earendil-works/pi-agent-core";
 import { getModel } from "@earendil-works/pi-ai";
 import { ApiKeyPromptDialog, ChatPanel } from "@earendil-works/pi-web-ui";
-import { createArchiveApiReadTool, createArchiveContextTool } from "./archive-agent-tools.js";
+import { createArchiveApiReadTool, createArchiveContextTool, createGenerateReportTool } from "./archive-agent-tools.js";
 import {
 	apiClient,
 	buildArchiveAgentSystemPrompt,
@@ -11,7 +11,18 @@ import {
 	setAgentUnsubscribe,
 	setArchiveAgent,
 	setChatPanel,
+	setReportHtml,
+	setReportLoading,
 } from "./app-state.js";
+
+function handleAgentEvent(event: AgentEvent): void {
+	if (event.type === "tool_execution_start" && event.toolName === "generate_report") {
+		setReportLoading(true);
+	}
+	if (event.type === "agent_start") {
+		setReportHtml(undefined);
+	}
+}
 
 let renderAppCallback: (() => void) | undefined;
 
@@ -39,13 +50,20 @@ export async function setupArchiveAgent(): Promise<void> {
 	});
 
 	const chatPanel = new ChatPanel();
-	agentUnsubscribeLocal = agent.subscribe(() => renderAppCallback?.());
+	agentUnsubscribeLocal = agent.subscribe((event) => {
+		handleAgentEvent(event);
+		renderAppCallback?.();
+	});
 	await chatPanel.setAgent(agent, {
 		onApiKeyRequired: async (provider: string) => ApiKeyPromptDialog.prompt(provider),
 		onBeforeSend: () => {
 			agent.state.systemPrompt = buildArchiveAgentSystemPrompt();
 		},
-		toolsFactory: () => [createArchiveContextTool(getArchiveAgentSnapshot), createArchiveApiReadTool(apiClient)],
+		toolsFactory: () => [
+			createArchiveContextTool(getArchiveAgentSnapshot),
+			createArchiveApiReadTool(apiClient),
+			createGenerateReportTool(setReportHtml),
+		],
 	});
 
 	setArchiveAgent(agent);
