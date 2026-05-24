@@ -1,6 +1,17 @@
 import { html, type TemplateResult } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { activeWorkspaceId, appState, refreshData, setActiveWorkspace, setReportHtml } from "./app-state.js";
+import {
+	activeWorkspaceId,
+	appState,
+	refreshData,
+	setActiveWorkspace,
+	setEntityForm,
+	setReportHtml,
+	updateEntityForm,
+	updateEntityFormSubmitting,
+	type FormField,
+} from "./app-state.js";
+import { apiClient } from "./app-state.js";
 import { statusLabel } from "./labels.js";
 import { icon } from "./render-utils.js";
 import {
@@ -109,6 +120,127 @@ function renderWorkspaceBody(): TemplateResult {
 	if (activeWorkspaceId === "archive") return renderArchiveWorkspace();
 	if (activeWorkspaceId === "governance") return renderGovernanceWorkspace();
 	return renderGenericWorkspace();
+}
+
+function validateFormField(field: FormField): string | undefined {
+	if (field.required && !field.value?.trim()) {
+		return `${field.label}不能为空`;
+	}
+	if (field.type === "number" && field.value && Number.isNaN(Number(field.value))) {
+		return `${field.label}必须是数字`;
+	}
+	return undefined;
+}
+
+function handleFormInputChange(index: number, value: string): void {
+	const form = appState.entityForm;
+	if (!form) return;
+	const fields = [...form.fields];
+	fields[index] = { ...fields[index], value, error: undefined };
+	updateEntityForm(fields);
+}
+
+async function handleFormSubmit(): Promise<void> {
+	const form = appState.entityForm;
+	if (!form) return;
+
+	const validatedFields = form.fields.map((f) => ({ ...f, error: validateFormField(f) }));
+	const hasErrors = validatedFields.some((f) => f.error);
+	if (hasErrors) {
+		updateEntityForm(validatedFields);
+		return;
+	}
+
+	updateEntityFormSubmitting(true, false);
+	try {
+		const body: Record<string, unknown> = {};
+		for (const field of form.fields) {
+			if (field.value === undefined || field.value === "") continue;
+			body[field.name] = field.type === "number" ? Number(field.value) : field.value;
+		}
+		await apiClient.call(form.operationId, { body });
+		updateEntityFormSubmitting(false, true);
+	} catch (error) {
+		updateEntityFormSubmitting(false, false, error instanceof Error ? error.message : "提交失败");
+	}
+}
+
+export function renderEntityFormModal(): TemplateResult {
+	const form = appState.entityForm;
+	if (!form) return html``;
+
+	return html`
+		<div class="modal-overlay" @click=${(e: Event) => { if (e.target === e.currentTarget) setEntityForm(undefined); }}>
+			<div class="modal">
+				<div class="modal-head">
+					<h2>创建${form.entityLabel}</h2>
+					<button class="icon-btn" @click=${() => setEntityForm(undefined)}>${icon("x")}</button>
+				</div>
+				${form.submitted
+					? html`
+						<div class="modal-body">
+							<div class="form-success">
+								${icon("check-circle")}
+								<h3>${form.entityLabel}创建成功</h3>
+								<button class="btn primary" @click=${() => { setEntityForm(undefined); void refreshData(); }}>完成</button>
+							</div>
+						</div>
+					`
+					: html`
+						<div class="modal-body">
+							${form.fields.map(
+								(field, i) => html`
+									<div class="form-group ${field.error ? "has-error" : ""}">
+										<label>
+											${field.label}
+											${field.required ? html`<span class="form-required">*</span>` : ""}
+										</label>
+										${field.type === "select"
+											? html`
+												<select
+													class="form-control"
+													.value=${field.value ?? ""}
+													@change=${(e: Event) => handleFormInputChange(i, (e.target as HTMLSelectElement).value)}
+												>
+													<option value="" disabled selected>${field.placeholder ?? "请选择"}</option>
+													${field.options?.map((opt) => html`<option value=${opt} ?selected=${field.value === opt}>${opt}</option>`)}
+												</select>
+											`
+											: field.type === "textarea"
+												? html`
+													<textarea
+														class="form-control"
+														placeholder=${field.placeholder ?? ""}
+														.value=${field.value ?? ""}
+														@input=${(e: Event) => handleFormInputChange(i, (e.target as HTMLTextAreaElement).value)}
+													></textarea>
+												`
+												: html`
+													<input
+														class="form-control"
+														type=${field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
+														placeholder=${field.placeholder ?? ""}
+														.value=${field.value ?? ""}
+														@input=${(e: Event) => handleFormInputChange(i, (e.target as HTMLInputElement).value)}
+													/>
+												`}
+										${field.error ? html`<div class="form-error">${field.error}</div>` : ""}
+									</div>
+								`,
+							)}
+							${form.submitError ? html`<div class="form-error form-global-error">${form.submitError}</div>` : ""}
+						</div>
+						<div class="modal-foot">
+							<button class="btn" @click=${() => setEntityForm(undefined)} ?disabled=${form.submitting}>取消</button>
+							<button class="btn primary" @click=${() => void handleFormSubmit()} ?disabled=${form.submitting}>
+								${form.submitting ? html`${icon("loader-circle")} 提交中...` : "确认创建"}
+							</button>
+						</div>
+					`
+				}
+			</div>
+		</div>
+	`;
 }
 
 function renderReportLoading(): TemplateResult {

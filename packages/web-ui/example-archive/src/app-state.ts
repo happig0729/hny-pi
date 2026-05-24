@@ -24,6 +24,28 @@ export interface AppState {
 	data?: ArchiveDashboardData;
 	reportHtml?: string;
 	reportLoading?: boolean;
+	entityForm?: EntityFormState;
+}
+
+export interface FormField {
+	name: string;
+	label: string;
+	type: "text" | "number" | "date" | "select" | "textarea";
+	required: boolean;
+	placeholder?: string;
+	options?: string[];
+	value?: string;
+	error?: string;
+}
+
+export interface EntityFormState {
+	entityType: string;
+	entityLabel: string;
+	operationId: string;
+	fields: FormField[];
+	submitting: boolean;
+	submitted: boolean;
+	submitError?: string;
 }
 
 export const config = loadConfig();
@@ -138,7 +160,29 @@ export function buildArchiveAgentSystemPrompt(): string {
   2. 可以使用内联 style 属性进行样式设置
   3. 可以使用 <table>、<tr>、<td>、<th>、<span>、<strong>、<em>、<h1>~<h6>、<p>、<ul>、<ol>、<li>、<svg>、<canvas> 等 HTML 标签
   4. 报表内容应完整、美观、专业，包含标题、数据表格或图表、摘要说明
-- 不要在聊天文本中直接输出 HTML 代码，所有 HTML 内容必须通过 generate_report 工具提交。`;
+- 不要在聊天文本中直接输出 HTML 代码，所有 HTML 内容必须通过 generate_report 工具提交。
+
+实体创建能力：
+- 当用户请求涉及"创建"、"新建"、"添加"、"新增"等语义，且目标为本体中定义的业务对象（项目、单位工程、文档、上传文件、编制实例等）时，判定为实体创建请求。
+- 必须调用 create_entity 工具，传入实体类型、中文名称、对应 API operationId 和表单字段定义。
+- 字段定义必须严格遵从本体模型中的对象属性定义，包括字段名、类型、是否必填。
+- 只有本体模型中明确定义为 enum 类型的字段才使用 select 类型并给出 options；其他字段一律使用 text 类型，不要自行编造下拉选项。
+- 工具会自动从后端字典（listDictionaries）和已有数据中获取有效选项来填充 select 字段，Agent 只需指定字段名和类型即可。
+- 本体模型中明确为 enum 的字段（Agent 可直接使用这些选项）：
+  * Project.status: active, project_archive
+  * Document.type: online, uploaded
+  * Document.status: draft, under_review, approved, rejected
+  * UploadFile.status: pending, signing, signed, collected, returned
+  * CompilationInstance.status: drafting, completed, signing, signed, collected
+  * ProjectMember.role: project_admin, data_admin, data_clerk
+  * User.role: super_admin, tenant_admin, system_admin, tenant_user
+  * Enterprise.type: building, construction, supervision, design, survey
+- 常见实体创建的 operationId 和字段参考：
+  * 创建项目 → createProject：必填 name(项目名称,text)、type(项目类型,text)、buildingUnit(建设单位,text)；选填 code、constructionUnit、supervisionUnit、designUnit、location、startDate(date)、endDate(date)、totalArea(number)、description(textarea)
+  * 创建单位工程 → createUnit：必填 name(名称,text)；选填 engType(工程类型,text)、structureType(结构类型,text)、floors(层数,number)、buildingArea(建筑面积,number)
+  * 创建文档 → createDocument：必填 title(标题,text)、type(类型,text)；选填 code、category、subCategory
+  * 创建编制实例 → createCompilationInstance：必填 name(名称,text)；选填 itemId(text)、unitId(number)
+- 工具调用后系统会弹出表单供用户填写，不需要在聊天中输出表单内容。`;
 }
 
 let onStateChanged: (() => void) | undefined;
@@ -165,6 +209,23 @@ export function setReportHtml(html: string | undefined): void {
 
 export function setReportLoading(loading: boolean): void {
 	appState = { ...appState, reportLoading: loading };
+	onStateChanged?.();
+}
+
+export function setEntityForm(form: EntityFormState | undefined): void {
+	appState = { ...appState, entityForm: form };
+	onStateChanged?.();
+}
+
+export function updateEntityForm(fields: FormField[]): void {
+	if (!appState.entityForm) return;
+	appState = { ...appState, entityForm: { ...appState.entityForm, fields } };
+	onStateChanged?.();
+}
+
+export function updateEntityFormSubmitting(submitting: boolean, submitted: boolean, submitError?: string): void {
+	if (!appState.entityForm) return;
+	appState = { ...appState, entityForm: { ...appState.entityForm, submitting, submitted, submitError } };
 	onStateChanged?.();
 }
 
