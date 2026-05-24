@@ -3,7 +3,7 @@ import { type Static, Type } from "typebox";
 import type { ApiCallOptions, ApiClient, Project } from "./archive-api.js";
 import { isReadOnlyOperationId, type ReadOnlyOperationId } from "./archive-operation-policy.js";
 import type { ActionProposalView, IssueView, MetricView } from "./archive-ontology-analysis.js";
-import type { EntityFormState, FormField } from "./app-state.js";
+import type { EntityFormState, FormField, VisualizationState } from "./app-state.js";
 import type { EvidenceRef, LifecycleInferenceContext, LifecycleStage, OntologyActionType } from "./ontology-runtime.js";
 import type { WorkspaceId } from "./workspace-definitions.js";
 
@@ -213,6 +213,133 @@ async function loadDictionaries(
 	} catch {
 	}
 	return map;
+}
+
+const ALLOWED_CHART_TYPES = new Set(["bar", "line", "pie", "scatter", "radar", "gauge", "treemap", "heatmap", "sankey", "funnel"]);
+
+const visualizeDataSchema = Type.Object({
+	title: Type.String({ description: "图表标题" }),
+	chartType: Type.String({
+		description: "ECharts 图表类型，如 bar（柱状图）、line（折线图）、pie（饼图）、scatter（散点图）、radar（雷达图）、gauge（仪表盘）、treemap（矩形树图）",
+	}),
+	optionJson: Type.String({
+		description: "ECharts option 对象的 JSON 字符串，定义图表的完整配置",
+	}),
+	description: Type.Optional(Type.String({
+		description: "图表下方的文字说明，解释数据含义或关键发现",
+	})),
+});
+
+type VisualizeDataParams = Static<typeof visualizeDataSchema>;
+
+export interface VisualizeDataToolDetails {
+	title: string;
+	chartType: string;
+}
+
+export function createVisualizeDataTool(onVisualize: (state: VisualizationState) => void): AgentTool<typeof visualizeDataSchema, VisualizeDataToolDetails> {
+	return {
+		label: "Visualize Data",
+		name: "visualize_data",
+		description:
+			"当查询结果适合用图表可视化展示时，生成 ECharts 图表配置并以弹窗形式展示。支持柱状图、折线图、饼图、散点图、雷达图、仪表盘等常见图表类型。",
+		parameters: visualizeDataSchema,
+		execute: async (_toolCallId: string, params: VisualizeDataParams) => {
+			const errors: string[] = [];
+			if (!params.title?.trim()) errors.push("图表标题不能为空");
+			if (!params.chartType?.trim()) errors.push("图表类型不能为空");
+			if (!params.optionJson?.trim()) errors.push("图表配置不能为空");
+			if (params.chartType && !ALLOWED_CHART_TYPES.has(params.chartType)) {
+				errors.push(`不支持的图表类型「${params.chartType}」，可选：${[...ALLOWED_CHART_TYPES].join("、")}`);
+			}
+			let parsed: Record<string, unknown> | undefined;
+			if (params.optionJson) {
+				try {
+					parsed = JSON.parse(params.optionJson);
+					if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+						errors.push("optionJson 必须是一个有效的 JSON 对象");
+					} else if (!parsed.series && !parsed.dataset) {
+						errors.push("图表配置缺少 series 或 dataset，无法渲染数据");
+					}
+				} catch {
+					errors.push("optionJson 不是合法的 JSON 字符串");
+				}
+			}
+			if (errors.length > 0) {
+				return {
+					content: [{ type: "text", text: `可视化配置校验失败：\n${errors.map((e) => "- " + e).join("\n")}\n\n请修正后重新调用。` }],
+					details: { title: params.title ?? "校验失败", chartType: params.chartType ?? "" },
+					isError: true,
+				} as { content: { type: "text"; text: string }[]; details: VisualizeDataToolDetails; isError: boolean };
+			}
+			const html = buildEChartsHtml(params.title, params.chartType, params.optionJson, params.description);
+			onVisualize({ title: params.title, chartHtml: html });
+			return {
+				content: [{ type: "text", text: `已生成「${params.title}」可视化图表，弹窗已展示给用户。` }],
+				details: { title: params.title, chartType: params.chartType },
+			};
+		},
+	};
+}
+
+function buildEChartsHtml(title: string, chartType: string, optionJson: string, description?: string): string {
+	let option: Record<string, unknown>;
+	try {
+		option = JSON.parse(optionJson);
+	} catch {
+		return buildErrorHtml(title, "图表数据解析失败", "传入的配置不是有效的 JSON 格式。请检查数据格式后重试。");
+	}
+	if (!option.series && !option.dataset) {
+		return buildErrorHtml(title, "图表配置不完整", "缺少 series（数据系列）或 dataset（数据集）配置，无法渲染图表。");
+	}
+	const escapedOption = JSON.stringify(option).replace(/</g, "\\u003c").replace(/<\/script>/gi, "<\\/script>");
+	const descHtml = description ? `<div class="chart-desc">${escapeHtml(description)}</div>` : "";
+	return `<div class="viz-container">
+  <div class="viz-title">${escapeHtml(title)}</div>
+  <div id="chart" style="width:100%;height:420px;"></div>
+  <div id="chart-error" style="display:none;padding:24px;text-align:center;color:#b84035;"></div>
+  ${descHtml}
+</div>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js" onerror="document.getElementById('chart-error').style.display='block';document.getElementById('chart-error').textContent='ECharts 组件加载失败，请检查网络连接后刷新页面。';document.getElementById('chart').style.display='none';"><\/script>
+<script>
+(function(){
+  try {
+    var el = document.getElementById('chart');
+    if(!el || typeof echarts === 'undefined'){
+      document.getElementById('chart-error').style.display='block';
+      document.getElementById('chart-error').textContent='ECharts 组件未能加载，请检查网络连接。';
+      el.style.display='none';
+      return;
+    }
+    var chart = echarts.init(el);
+    var option = ${escapedOption};
+    if(!option.title) option.title = {text: ${JSON.stringify(title)}};
+    if(!option.tooltip) option.tooltip = {trigger: '${chartType === "pie" || chartType === "gauge" || chartType === "treemap" || chartType === "funnel" ? "item" : "axis"}'};
+    chart.setOption(option);
+    window.addEventListener('resize', function(){ chart.resize(); });
+  } catch(e) {
+    var errEl = document.getElementById('chart-error');
+    errEl.style.display = 'block';
+    errEl.textContent = '图表渲染出错：' + (e.message || '未知错误');
+    document.getElementById('chart').style.display = 'none';
+  }
+})();
+<\/script>`;
+}
+
+function buildErrorHtml(title: string, errorTitle: string, errorMessage: string): string {
+	return `<div class="viz-container">
+  <div class="viz-title">${escapeHtml(title)}</div>
+  <div style="padding:32px;text-align:center;">
+    <div style="font-size:48px;color:#b84035;margin-bottom:16px;">⚠</div>
+    <div style="font-size:16px;font-weight:700;color:#b84035;margin-bottom:8px;">${escapeHtml(errorTitle)}</div>
+    <div style="font-size:14px;color:#66716b;line-height:1.6;">${escapeHtml(errorMessage)}</div>
+  </div>
+</div>`;
+}
+
+function escapeHtml(text: string): string {
+	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 export function createArchiveContextTool(getSnapshot: () => ArchiveAgentSnapshot): AgentTool<typeof archiveContextSchema, ArchiveContextToolDetails> {

@@ -3,7 +3,7 @@ import { createIcons, icons } from "lucide";
 import { appState, refreshData, setRenderCallback } from "./app-state.js";
 import { setAgentRenderCallback, setupArchiveAgent } from "./archive-agent.js";
 import { renderAgentPanel } from "./render-agent-panel.js";
-import { renderEntityFormModal, renderMain, renderSidebar, renderTopbar } from "./render-layout.js";
+import { renderEntityFormModal, renderMain, renderSidebar, renderTopbar, renderVisualizationModal } from "./render-layout.js";
 import "./app.css";
 
 function renderApp(): void {
@@ -20,6 +20,7 @@ function renderApp(): void {
 				${renderAgentPanel()}
 			</div>
 			${appState.entityForm ? renderEntityFormModal() : ""}
+			${appState.visualization ? renderVisualizationModal() : ""}
 		`,
 		app,
 	);

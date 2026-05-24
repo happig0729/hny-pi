@@ -7,6 +7,7 @@ import {
 	setActiveWorkspace,
 	setEntityForm,
 	setReportHtml,
+	setVisualization,
 	updateEntityForm,
 	updateEntityFormSubmitting,
 	type FormField,
@@ -163,6 +164,37 @@ async function handleFormSubmit(): Promise<void> {
 	} catch (error) {
 		updateEntityFormSubmitting(false, false, error instanceof Error ? error.message : "提交失败");
 	}
+}
+
+export function renderVisualizationModal(): TemplateResult {
+	const viz = appState.visualization;
+	if (!viz) return html``;
+	const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,system-ui,-apple-system,sans-serif;background:#fff;color:#18201d;padding:24px}
+.viz-title{font-size:20px;font-weight:800;text-align:center;margin-bottom:16px;color:#18201d}
+#chart{width:100%;height:420px}
+.chart-desc{margin-top:14px;padding:12px 16px;background:#f0f4f1;border-radius:8px;color:#66716b;font-size:13px;line-height:1.6}
+</style></head><body>${viz.chartHtml}</body></html>`;
+	return html`
+		<div class="modal-overlay" @click=${(e: Event) => { if (e.target === e.currentTarget) setVisualization(undefined); }}>
+			<div class="modal viz-modal">
+				<div class="modal-head">
+					<h2>${viz.title}</h2>
+					<button class="icon-btn" @click=${() => setVisualization(undefined)}>${icon("x")}</button>
+				</div>
+				<div class="modal-body viz-body">
+					<iframe
+						class="viz-iframe"
+						sandbox="allow-scripts"
+						.srcdoc=${doc}
+						title=${viz.title}
+					></iframe>
+				</div>
+			</div>
+		</div>
+	`;
 }
 
 export function renderEntityFormModal(): TemplateResult {

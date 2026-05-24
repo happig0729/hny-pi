@@ -25,6 +25,12 @@ export interface AppState {
 	reportHtml?: string;
 	reportLoading?: boolean;
 	entityForm?: EntityFormState;
+	visualization?: VisualizationState;
+}
+
+export interface VisualizationState {
+	title: string;
+	chartHtml: string;
 }
 
 export interface FormField {
@@ -152,6 +158,13 @@ export function buildArchiveAgentSystemPrompt(): string {
 - 使用工程档案业务语言：项目、单位工程、目录节点、资料、文件著录、编制、审核、签章、预检、归档包、采集。
 - 每个建议应说明关联对象、依据、下一步动作和是否需要人工确认。
 
+工具使用边界（严格遵守）：
+- generate_report：输出在页面 main 区域展示，用于报表、报告类请求。
+- create_entity：输出以弹窗形式展示，用于创建/新建实体时生成表单。
+- visualize_data：输出以弹窗形式展示，用于查询结果的图表可视化。
+- 普通对话回复（非上述三种工具）：直接在聊天面板展示，不触发任何弹窗或 main 区域替换。
+- 同一条回复中，三种工具只能选择其中一种调用，禁止同时调用多个展示类工具。
+
 报表生成能力：
 - 当用户请求涉及"报表"、"报告"、"统计图表"、"数据可视化"、"汇总"、"汇总表"、"分析报告"等语义时，判定为报表生成请求。
 - 生成报表时，必须调用 generate_report 工具，将报表标题和 HTML 内容传入工具参数。
@@ -182,7 +195,24 @@ export function buildArchiveAgentSystemPrompt(): string {
   * 创建单位工程 → createUnit：必填 name(名称,text)；选填 engType(工程类型,text)、structureType(结构类型,text)、floors(层数,number)、buildingArea(建筑面积,number)
   * 创建文档 → createDocument：必填 title(标题,text)、type(类型,text)；选填 code、category、subCategory
   * 创建编制实例 → createCompilationInstance：必填 name(名称,text)；选填 itemId(text)、unitId(number)
-- 工具调用后系统会弹出表单供用户填写，不需要在聊天中输出表单内容。`;
+- 工具调用后系统会弹出表单供用户填写，不需要在聊天中输出表单内容。
+
+数据查询可视化能力：
+- 当用户发起查询请求时，先通过 archive_context 或 archive_api_read 获取数据，在回复中给出文字结论。
+- 回复完成后，主动判断查询结果是否适合可视化展示。判断规则：
+  1. 数据包含3条及以上的数值型记录 → 适合柱状图(bar)或折线图(line)
+  2. 数据包含占比/比例关系 → 适合饼图(pie)
+  3. 数据包含多维度对比（如按时间、按类别） → 适合柱状图(bar)或雷达图(radar)
+  4. 数据包含趋势变化 → 适合折线图(line)或面积图(line+areaStyle)
+  5. 数据是单一指标的完成率/进度 → 适合仪表盘(gauge)
+  6. 数据量少于2条或纯文本描述 → 不需要可视化
+- 判定需要可视化后，调用 visualize_data 工具，传入 ECharts option 的 JSON 字符串。
+- ECharts option 配置要求：
+  1. 使用简洁专业的配色，推荐色板：['#1f7a55','#2d65b8','#a76812','#b84035','#0d6f73','#7c5cbf']
+  2. 必须包含完整的 xAxis/yAxis/series 或 series（饼图），确保数据可正确渲染
+  3. 文字标签使用中文，字号不小于12px
+  4. 图表不应过度复杂，优先保证信息清晰可读
+- 不要在聊天文本中输出 ECharts 配置代码。`;
 }
 
 let onStateChanged: (() => void) | undefined;
@@ -226,6 +256,11 @@ export function updateEntityForm(fields: FormField[]): void {
 export function updateEntityFormSubmitting(submitting: boolean, submitted: boolean, submitError?: string): void {
 	if (!appState.entityForm) return;
 	appState = { ...appState, entityForm: { ...appState.entityForm, submitting, submitted, submitError } };
+	onStateChanged?.();
+}
+
+export function setVisualization(state: VisualizationState | undefined): void {
+	appState = { ...appState, visualization: state };
 	onStateChanged?.();
 }
 

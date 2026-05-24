@@ -1,7 +1,7 @@
 import { Agent, type AgentEvent } from "@earendil-works/pi-agent-core";
 import { getModel } from "@earendil-works/pi-ai";
 import { ApiKeyPromptDialog, ChatPanel } from "@earendil-works/pi-web-ui";
-import { createArchiveApiReadTool, createArchiveContextTool, createCreateEntityTool, createGenerateReportTool } from "./archive-agent-tools.js";
+import { createArchiveApiReadTool, createArchiveContextTool, createCreateEntityTool, createGenerateReportTool, createVisualizeDataTool } from "./archive-agent-tools.js";
 import {
 	apiClient,
 	buildArchiveAgentSystemPrompt,
@@ -14,6 +14,7 @@ import {
 	setEntityForm,
 	setReportHtml,
 	setReportLoading,
+	setVisualization,
 } from "./app-state.js";
 
 function handleAgentEvent(event: AgentEvent): void {
@@ -65,6 +66,7 @@ export async function setupArchiveAgent(): Promise<void> {
 			createArchiveApiReadTool(apiClient),
 			createGenerateReportTool(setReportHtml),
 			createCreateEntityTool(apiClient, setEntityForm),
+			createVisualizeDataTool(setVisualization),
 		],
 	});
 
