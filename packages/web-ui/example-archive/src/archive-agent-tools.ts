@@ -97,7 +97,10 @@ export interface GenerateReportToolDetails {
 	title: string;
 }
 
-export function createGenerateReportTool(onReport: (html: string) => void): AgentTool<typeof generateReportSchema, GenerateReportToolDetails> {
+export function createGenerateReportTool(
+	onReport: (html: string) => void,
+	onReportMeta: (prompt: string, toolName: string, toolParams: string) => void,
+): AgentTool<typeof generateReportSchema, GenerateReportToolDetails> {
 	return {
 		label: "Generate Report",
 		name: "generate_report",
@@ -106,6 +109,7 @@ export function createGenerateReportTool(onReport: (html: string) => void): Agen
 		parameters: generateReportSchema,
 		execute: async (_toolCallId: string, params: GenerateReportParams) => {
 			onReport(params.html);
+			onReportMeta("", "generate_report", JSON.stringify(params));
 			return {
 				content: [{ type: "text", text: `报表「${params.title}」已生成并渲染到页面主区域。` }],
 				details: { title: params.title },
@@ -340,6 +344,41 @@ function buildErrorHtml(title: string, errorTitle: string, errorMessage: string)
 
 function escapeHtml(text: string): string {
 	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+const runPinnedReportSchema = Type.Object({
+	pinnedReportId: Type.String({ description: "已固化报表的 ID" }),
+});
+
+type RunPinnedReportParams = Static<typeof runPinnedReportSchema>;
+
+export function createRunPinnedReportTool(
+	onReport: (html: string) => void,
+	onReportMeta: (prompt: string, toolName: string, toolParams: string) => void,
+): AgentTool<typeof runPinnedReportSchema, Record<string, never>> {
+	return {
+		label: "Run Pinned Report",
+		name: "run_pinned_report",
+		description: "一键调用已固化的报表功能，无需重新配置参数即可生成相同样式的报表。通过 ID 指定要运行的固化报表。",
+		parameters: runPinnedReportSchema,
+		execute: async (_toolCallId: string, params: RunPinnedReportParams) => {
+			const { getPinnedReport } = await import("./pinned-store.js");
+			const report = await getPinnedReport(params.pinnedReportId);
+			if (!report) {
+				return {
+					content: [{ type: "text", text: `未找到 ID 为「${params.pinnedReportId}」的固化报表，可能已被删除。` }],
+					isError: true,
+					details: {},
+				};
+			}
+			onReport(report.reportHtml);
+			onReportMeta(report.agentPrompt, "run_pinned_report", JSON.stringify(params));
+			return {
+				content: [{ type: "text", text: `已运行固化报表「${report.name}」并渲染到页面主区域。` }],
+				details: {},
+			};
+		},
+	};
 }
 
 export function createArchiveContextTool(getSnapshot: () => ArchiveAgentSnapshot): AgentTool<typeof archiveContextSchema, ArchiveContextToolDetails> {

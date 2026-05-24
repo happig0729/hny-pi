@@ -24,13 +24,28 @@ export interface AppState {
 	data?: ArchiveDashboardData;
 	reportHtml?: string;
 	reportLoading?: boolean;
+	reportAgentPrompt?: string;
+	reportToolName?: string;
+	reportToolParams?: string;
 	entityForm?: EntityFormState;
 	visualization?: VisualizationState;
+	pinDialog?: PinDialogState;
+	pinnedReports?: import("./pinned-store.js").PinnedReport[];
+	pinnedPanelOpen?: boolean;
 }
 
 export interface VisualizationState {
 	title: string;
 	chartHtml: string;
+}
+
+export interface PinDialogState {
+	name: string;
+	description: string;
+	category: string;
+	visibility: "personal" | "public";
+	saving: boolean;
+	error?: string;
 }
 
 export interface FormField {
@@ -141,13 +156,40 @@ export function getArchiveAgentSnapshot() {
 
 export function buildArchiveAgentSystemPrompt(): string {
 	const workspace = getWorkspace(activeWorkspaceId);
+	const snapshot = getArchiveAgentSnapshot();
+	const ctx = snapshot.lifecycleContext;
+	const metricsBlock = snapshot.metrics.length > 0
+		? snapshot.metrics.map((m) => `  - ${m.label}：${m.value}（${m.description}）`).join("\n")
+		: "  （暂无指标数据）";
+	const issuesBlock = snapshot.issues.length > 0
+		? snapshot.issues.map((i) => `  - ${i.title}（${i.objectType} ${i.objectId}）：${i.description}${i.suggestedAction ? " → 建议：" + i.suggestedAction : ""}`).join("\n")
+		: "  （暂无阻塞问题）";
+	const proposalBlock = snapshot.actionProposal
+		? `  事项：${snapshot.actionProposal.label}\n  确认级别：${snapshot.actionProposal.confirmationLevel}\n  需要角色：${snapshot.actionProposal.requiredRole}\n  副作用：${snapshot.actionProposal.sideEffects.join("、")}`
+		: "  （暂无待办建议）";
+	const countsBlock = Object.entries(snapshot.counts).map(([k, v]) => `  ${k}：${v}`).join("；");
 	return `你是工程档案全生命周期管理系统的生产级业务智能体，不是自由聊天助手。
 
 当前右侧身份：${workspace.agentName}（${workspace.agentKind}）。
 
+【当前页面上下文（系统自动采集）】
+- 工作台：${workspace.label}
+- 生命周期阶段：${snapshot.lifecycleStage.label}
+- 项目：${snapshot.project ? `${snapshot.project.name}（${snapshot.project.code}，状态：${snapshot.project.status}）` : "未选择项目"}
+- 认证状态：${snapshot.auth.authenticated ? "已认证" : snapshot.auth.message}
+- 数据加载：${snapshot.loadState}
+- 本体推导上下文：${ctx}
+- 关键指标：
+${metricsBlock}
+- 阻塞与问题：
+${issuesBlock}
+- 下一步办理建议：
+${proposalBlock}
+- 数据统计：${countsBlock}
+【上下文结束】
+
 工作原则：
-- 本体是领域知识字典，显式定义对象、关系、动作、策略、证据和生命周期；回答必须基于本体和真实后端数据。
-- 涉及项目、资料、上传文件、审核、签章、预检、归档包、采集项时，先调用 archive_context 获取本体推导后的当前上下文。
+- 上述【当前页面上下文】由系统在每次页面切换和数据刷新时自动采集并注入，你可直接引用，无需再调用 archive_context 获取基础上下文。
 - 需要补充读取后端数据时，只能通过 archive_api_read 读取后端只读接口。
 - 不要声称已经创建、更新、审核、签章、归档或删除任何对象；当前工具层不开放写操作。
 - 对高风险动作只给出"办理草案、业务依据、影响对象、确认条件、阻塞项"，等待人工确认。
@@ -162,8 +204,9 @@ export function buildArchiveAgentSystemPrompt(): string {
 - generate_report：输出在页面 main 区域展示，用于报表、报告类请求。
 - create_entity：输出以弹窗形式展示，用于创建/新建实体时生成表单。
 - visualize_data：输出以弹窗形式展示，用于查询结果的图表可视化。
-- 普通对话回复（非上述三种工具）：直接在聊天面板展示，不触发任何弹窗或 main 区域替换。
-- 同一条回复中，三种工具只能选择其中一种调用，禁止同时调用多个展示类工具。
+- run_pinned_report：一键运行已固化的报表功能，通过 ID 指定。当用户说"运行xx报表"、"打开xx功能"且名称匹配已固化功能时使用。
+- 普通对话回复（非上述工具）：直接在聊天面板展示，不触发任何弹窗或 main 区域替换。
+- 同一条回复中，上述展示类工具只能选择其中一种调用，禁止同时调用多个展示类工具。
 
 报表生成能力：
 - 当用户请求涉及"报表"、"报告"、"统计图表"、"数据可视化"、"汇总"、"汇总表"、"分析报告"等语义时，判定为报表生成请求。
@@ -280,6 +323,26 @@ export function updateEntityFormSubmitting(submitting: boolean, submitted: boole
 
 export function setVisualization(state: VisualizationState | undefined): void {
 	appState = { ...appState, visualization: state };
+	onStateChanged?.();
+}
+
+export function setReportMeta(agentPrompt: string, toolName: string, toolParams: string): void {
+	appState = { ...appState, reportAgentPrompt: agentPrompt, reportToolName: toolName, reportToolParams: toolParams };
+	onStateChanged?.();
+}
+
+export function setPinDialog(state: PinDialogState | undefined): void {
+	appState = { ...appState, pinDialog: state };
+	onStateChanged?.();
+}
+
+export function setPinnedReports(reports: import("./pinned-store.js").PinnedReport[]): void {
+	appState = { ...appState, pinnedReports: reports };
+	onStateChanged?.();
+}
+
+export function setPinnedPanelOpen(open: boolean): void {
+	appState = { ...appState, pinnedPanelOpen: open };
 	onStateChanged?.();
 }
 

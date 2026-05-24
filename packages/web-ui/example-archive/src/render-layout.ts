@@ -6,13 +6,19 @@ import {
 	refreshData,
 	setActiveWorkspace,
 	setEntityForm,
+	setPinDialog,
+	setPinnedPanelOpen,
+	setPinnedReports,
 	setReportHtml,
 	setVisualization,
 	updateEntityForm,
 	updateEntityFormSubmitting,
 	type FormField,
+	type PinDialogState,
 } from "./app-state.js";
 import { apiClient } from "./app-state.js";
+import { deletePinnedReport, generateId, listPinnedReports, savePinnedReport, type PinnedReport } from "./pinned-store.js";
+import { rerunPinnedReport } from "./archive-agent.js";
 import { statusLabel } from "./labels.js";
 import { icon } from "./render-utils.js";
 import {
@@ -83,6 +89,11 @@ export function renderSidebar(): TemplateResult {
 						</button>
 					`,
 				)}
+			<div class="nav-label">工具</div>
+			<button class="nav-btn" @click=${async () => { setPinnedReports(await listPinnedReports()); setPinnedPanelOpen(true); }}>
+				${icon("bookmark")}
+				<span>固化功能</span>
+			</button>
 		</nav>
 	`;
 }
@@ -164,6 +175,150 @@ async function handleFormSubmit(): Promise<void> {
 	} catch (error) {
 		updateEntityFormSubmitting(false, false, error instanceof Error ? error.message : "提交失败");
 	}
+}
+
+async function handlePinSave(): Promise<void> {
+	const dialog = appState.pinDialog;
+	if (!dialog) return;
+	if (!dialog.name.trim()) {
+		setPinDialog({ ...dialog, error: "功能名称不能为空" });
+		return;
+	}
+	setPinDialog({ ...dialog, saving: true, error: undefined });
+	try {
+		const now = Date.now();
+		const report: PinnedReport = {
+			id: generateId(),
+			name: dialog.name.trim(),
+			description: dialog.description.trim(),
+			category: dialog.category.trim() || "未分类",
+			visibility: dialog.visibility,
+			reportHtml: appState.reportHtml ?? "",
+			agentPrompt: appState.reportAgentPrompt ?? "",
+			toolName: appState.reportToolName ?? "",
+			toolParams: appState.reportToolParams ?? "",
+			version: 1,
+			versions: [{ version: 1, reportHtml: appState.reportHtml ?? "", agentPrompt: appState.reportAgentPrompt ?? "", toolParams: appState.reportToolParams ?? "", savedAt: now }],
+			createdAt: now,
+			updatedAt: now,
+		};
+		await savePinnedReport(report);
+		setPinDialog(undefined);
+		setPinnedReports(await listPinnedReports());
+	} catch (e) {
+		setPinDialog({ ...dialog, saving: false, error: e instanceof Error ? e.message : "保存失败" });
+	}
+}
+
+async function handlePinDelete(id: string): Promise<void> {
+	await deletePinnedReport(id);
+	setPinnedReports(await listPinnedReports());
+}
+
+async function handlePinRun(report: PinnedReport): Promise<void> {
+	setPinnedPanelOpen(false);
+	if (report.agentPrompt) {
+		await rerunPinnedReport(report.agentPrompt);
+	} else {
+		setReportHtml(report.reportHtml);
+	}
+}
+
+export function renderPinDialogModal(): TemplateResult {
+	const dialog = appState.pinDialog;
+	if (!dialog) return html``;
+	const updateDialog = (patch: Partial<PinDialogState>) => setPinDialog({ ...dialog, ...patch });
+	return html`
+		<div class="modal-overlay" @click=${(e: Event) => { if (e.target === e.currentTarget) setPinDialog(undefined); }}>
+			<div class="modal" style="width:480px">
+				<div class="modal-head">
+					<h2>固化为功能</h2>
+					<button class="icon-btn" @click=${() => setPinDialog(undefined)}>${icon("x")}</button>
+				</div>
+				<div class="modal-body">
+					<div class="form-group">
+						<label>功能名称 <span class="form-required">*</span></label>
+						<input class="form-control" type="text" placeholder="例如：项目进度周报" .value=${dialog.name} @input=${(e: Event) => updateDialog({ name: (e.target as HTMLInputElement).value, error: undefined })} />
+					</div>
+					<div class="form-group">
+						<label>功能描述</label>
+						<textarea class="form-control" placeholder="描述这个固化功能的用途" .value=${dialog.description} @input=${(e: Event) => updateDialog({ description: (e.target as HTMLTextAreaElement).value })}></textarea>
+					</div>
+					<div class="form-group">
+						<label>分类</label>
+						<input class="form-control" type="text" placeholder="例如：周报、月报、专题报告" .value=${dialog.category} @input=${(e: Event) => updateDialog({ category: (e.target as HTMLInputElement).value })} />
+					</div>
+					<div class="form-group">
+						<label>可见范围</label>
+						<div style="display:flex;gap:12px;margin-top:4px">
+							<label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
+								<input type="radio" name="visibility" value="personal" ?checked=${dialog.visibility === "personal"} @change=${() => updateDialog({ visibility: "personal" })} /> 仅自己可见
+							</label>
+							<label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
+								<input type="radio" name="visibility" value="public" ?checked=${dialog.visibility === "public"} @change=${() => updateDialog({ visibility: "public" })} /> 团队可见
+							</label>
+						</div>
+					</div>
+					${dialog.error ? html`<div class="form-error form-global-error">${dialog.error}</div>` : ""}
+				</div>
+				<div class="modal-foot">
+					<button class="btn" @click=${() => setPinDialog(undefined)} ?disabled=${dialog.saving}>取消</button>
+					<button class="btn primary" @click=${() => void handlePinSave()} ?disabled=${dialog.saving}>
+						${dialog.saving ? "保存中..." : "确认固化"}
+					</button>
+				</div>
+			</div>
+		</div>
+	`;
+}
+
+export function renderPinnedPanel(): TemplateResult {
+	const open = appState.pinnedPanelOpen;
+	const reports = appState.pinnedReports ?? [];
+	if (!open) return html``;
+	const grouped = new Map<string, PinnedReport[]>();
+	for (const r of reports) {
+		const cat = r.category || "未分类";
+		if (!grouped.has(cat)) grouped.set(cat, []);
+		grouped.get(cat)!.push(r);
+	}
+	return html`
+		<div class="pinned-overlay" @click=${(e: Event) => { if (e.target === e.currentTarget) setPinnedPanelOpen(false); }}>
+			<div class="pinned-panel">
+				<div class="pinned-head">
+					<h2>固化功能</h2>
+					<button class="icon-btn" @click=${() => setPinnedPanelOpen(false)}>${icon("x")}</button>
+				</div>
+				<div class="pinned-body">
+					${reports.length === 0
+						? html`<div class="pinned-empty">${icon("inbox")}<p>暂无固化功能</p><div class="sub">在报表页面点击"固化为功能"按钮可将报表保存为可复用的功能模块</div></div>`
+						: [...grouped.entries()].map(([cat, items]) => html`
+							<div class="pinned-group">
+								<div class="pinned-group-title">${icon("folder")} ${cat}</div>
+								${items.map((r) => html`
+									<div class="pinned-item">
+										<div class="pinned-item-info">
+											<div class="pinned-item-name">${r.name}</div>
+											<div class="pinned-item-meta">
+												${r.visibility === "public" ? html`<span class="badge blue">团队</span>` : html`<span class="badge">个人</span>`}
+												<span>v${r.version}</span>
+												<span>${new Date(r.updatedAt).toLocaleDateString()}</span>
+											</div>
+											${r.description ? html`<div class="sub">${r.description}</div>` : ""}
+										</div>
+										<div class="pinned-item-actions">
+											<button class="btn primary btn-sm" @click=${() => void handlePinRun(r)}>运行</button>
+											<button class="btn btn-sm" @click=${() => void handlePinDelete(r.id)}>${icon("trash-2")}</button>
+										</div>
+									</div>
+								`)}
+							</div>
+						`)
+					}
+				</div>
+			</div>
+		</div>
+	`;
 }
 
 export function renderVisualizationModal(): TemplateResult {
@@ -303,6 +458,11 @@ function renderReportView(): TemplateResult {
 					${icon("arrow-left")} 返回工作台
 				</button>
 				<h2>智能报表</h2>
+				<div style="margin-left:auto;display:flex;gap:8px">
+					<button class="btn primary" @click=${() => setPinDialog({ name: "", description: "", category: "", visibility: "personal", saving: false })}>
+						${icon("pin")} 固化为功能
+					</button>
+				</div>
 			</div>
 			<div class="report-container">${unsafeHTML(appState.reportHtml ?? "")}</div>
 		</main>
