@@ -172,11 +172,19 @@ export function renderVisualizationModal(): TemplateResult {
 	const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:Inter,system-ui,-apple-system,sans-serif;background:#fff;color:#18201d;padding:24px}
+body{font-family:Inter,system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#fff;color:#18201d;padding:20px}
+.viz-loading{display:flex;align-items:center;justify-content:center;height:420px;color:#66716b;font-size:14px;gap:8px}
+.viz-loading .spinner{width:24px;height:24px;border:3px solid #d9ded8;border-top-color:#1f7a55;border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .viz-title{font-size:20px;font-weight:800;text-align:center;margin-bottom:16px;color:#18201d}
 #chart{width:100%;height:420px}
 .chart-desc{margin-top:14px;padding:12px 16px;background:#f0f4f1;border-radius:8px;color:#66716b;font-size:13px;line-height:1.6}
-</style></head><body>${viz.chartHtml}</body></html>`;
+@media(max-width:520px){#chart{height:300px}.viz-loading{height:300px}body{padding:12px}}
+</style></head><body>
+<div class="viz-loading" id="viz-loading"><div class="spinner"></div>图表加载中...</div>
+${viz.chartHtml}
+<script>document.getElementById('viz-loading').style.display='none';<\/script>
+</body></html>`;
 	return html`
 		<div class="modal-overlay" @click=${(e: Event) => { if (e.target === e.currentTarget) setVisualization(undefined); }}>
 			<div class="modal viz-modal">
