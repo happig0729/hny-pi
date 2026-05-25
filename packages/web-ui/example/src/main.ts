@@ -400,6 +400,56 @@ function normalizeA2uiMessages(messages: A2uiMessage[]): A2uiMessage[] {
 
 		normalizeAction(comp, templatePath);
 		normalizePathRecords(comp, templatePath);
+
+		// Automatically inject premium visual styles for basic A2UI components
+		if (comp.styles === undefined || typeof comp.styles === "object") {
+			const defaultStyles: Record<string, string> = {};
+			if (componentName === "Card") {
+				Object.assign(defaultStyles, {
+					borderRadius: "16px",
+					boxShadow: "0 10px 30px -10px rgba(0, 0, 0, 0.05)",
+					border: "1px solid light-dark(var(--n-90), var(--n-20))",
+					padding: "20px",
+					backgroundColor: "light-dark(var(--n-100), var(--n-15))",
+					transition: "transform 0.2s ease, box-shadow 0.2s ease",
+				});
+			} else if (componentName === "Button") {
+				Object.assign(defaultStyles, {
+					borderRadius: "10px",
+					padding: "10px 20px",
+					fontWeight: "600",
+					cursor: "pointer",
+					border: "none",
+					transition: "all 0.2s ease",
+				});
+			} else if (componentName === "TextField" || componentName === "DateTimeInput") {
+				Object.assign(defaultStyles, {
+					borderRadius: "10px",
+					border: "1px solid light-dark(var(--n-80), var(--n-25))",
+					padding: "10px 14px",
+					backgroundColor: "light-dark(var(--n-100), var(--n-10))",
+					color: "light-dark(var(--n-0), var(--n-100))",
+					transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+				});
+			} else if (componentName === "List") {
+				Object.assign(defaultStyles, {
+					display: "flex",
+					flexDirection: "column",
+					gap: "16px",
+				});
+			} else if (componentName === "Column" || componentName === "Row") {
+				Object.assign(defaultStyles, {
+					gap: "12px",
+				});
+			}
+
+			if (Object.keys(defaultStyles).length > 0) {
+				comp.styles = {
+					...defaultStyles,
+					...((comp.styles as object) || {}),
+				};
+			}
+		}
 	};
 
 	const normalizeComponentKeys = (obj: unknown) => {
