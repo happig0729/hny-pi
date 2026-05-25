@@ -4,6 +4,7 @@ import {
 	activeWorkspaceId,
 	appState,
 	refreshData,
+	setActiveAgentPanelTab,
 	setActiveWorkspace,
 	setEntityForm,
 	setPinDialog,
@@ -20,6 +21,7 @@ import { apiClient } from "./app-state.js";
 import { deletePinnedReport, generateId, listPinnedReports, savePinnedReport, type PinnedReport } from "./pinned-store.js";
 import { rerunPinnedReport } from "./archive-agent.js";
 import { statusLabel } from "./labels.js";
+import { renderOntologyDecisionPanel } from "./render-agent-panel.js";
 import { icon } from "./render-utils.js";
 import {
 	renderArchiveWorkspace,
@@ -477,6 +479,15 @@ export function renderMain(): TemplateResult {
 	if (appState.reportHtml) return renderReportView();
 
 	const workspace = getWorkspace(activeWorkspaceId);
+	const businessSubtitle = {
+		cockpit: "按项目组织、文件著录、编制审核、签章确认、预检归档查看当前业务进展和下一步办理动作。",
+		intake: "围绕文件进入档案系统后的目录归类、著录字段、状态流转和批量提交进行办理。",
+		compile: "聚焦编制实例、在线资料和字段来源，确保填报内容可追溯、可审核、可进入归档链路。",
+		review: "集中处理待审核资料、退回原因和整改闭环，高风险退回动作必须由人员确认。",
+		signing: "聚合签章任务、流程节点、待签责任人和完成状态，定位签章环节阻塞原因。",
+		archive: "检查归档完整性、预检结果、归档包状态和采集闭环，明确能否进入最终归档。",
+		governance: "查看接口加载、操作规则、权限约束和依据链状态，确保智能体建议可追溯、可审计。",
+	}[workspace.id];
 	return html`
 		<main class="main">
 			<section>
@@ -484,13 +495,14 @@ export function renderMain(): TemplateResult {
 					<div>
 						<div class="eyebrow">${workspace.eyebrow}</div>
 						<h1>${workspace.title}</h1>
-						<div class="sub">${workspace.subtitle}</div>
+						<div class="sub">${businessSubtitle}</div>
 					</div>
 					<div>
 						<button class="btn" @click=${() => void refreshData()}>${icon("refresh-cw")} 刷新</button>
-						<button class="btn primary">${icon("play-circle")} 生成办理建议</button>
+						<button class="btn primary" @click=${() => setActiveAgentPanelTab("actions")}>${icon("play-circle")} 查看办理草案</button>
 					</div>
 				</div>
+				${renderOntologyDecisionPanel()}
 				${renderWorkspaceBody()}
 			</section>
 		</main>

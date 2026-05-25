@@ -9,22 +9,20 @@ import { getWorkspace, type WorkspaceId } from "./workspace-definitions.js";
 
 export function renderAgentTabs(): TemplateResult {
 	return html`
-		<div class="agent-tabs">
-			<button class="agent-tab ${activeAgentPanelTab === "suggestions" ? "active" : ""}" @click=${() => setActiveAgentPanelTab("suggestions")}>建议</button>
-			<button class="agent-tab ${activeAgentPanelTab === "evidence" ? "active" : ""}" @click=${() => setActiveAgentPanelTab("evidence")}>依据</button>
-			<button class="agent-tab ${activeAgentPanelTab === "actions" ? "active" : ""}" @click=${() => setActiveAgentPanelTab("actions")}>办理</button>
+		<div class="decision-tabs">
+			<button class="decision-tab ${activeAgentPanelTab === "suggestions" ? "active" : ""}" @click=${() => setActiveAgentPanelTab("suggestions")}>建议</button>
+			<button class="decision-tab ${activeAgentPanelTab === "evidence" ? "active" : ""}" @click=${() => setActiveAgentPanelTab("evidence")}>依据</button>
+			<button class="decision-tab ${activeAgentPanelTab === "actions" ? "active" : ""}" @click=${() => setActiveAgentPanelTab("actions")}>办理</button>
 		</div>
 	`;
 }
 
-function renderAgentWorkbench(workspaceId: WorkspaceId, data?: ArchiveDashboardData): TemplateResult {
+function renderOntologyDecisionBody(workspaceId: WorkspaceId, data?: ArchiveDashboardData): TemplateResult {
 	if (!data) {
 		return html`
-			<div class="agent-workbench">
-				<div class="agent-card important">
-					<div class="agent-card-title">${icon("loader-circle")} 等待真实后端数据</div>
-					<div class="sub">智能体已初始化，业务建议、依据和办理草案会在接口数据加载后生成。</div>
-				</div>
+			<div class="agent-card important">
+				<div class="agent-card-title">${icon("loader-circle")} 等待真实后端数据</div>
+				<div class="sub">智能体已初始化，业务建议、依据和办理草案会在接口数据加载后生成。</div>
 			</div>
 		`;
 	}
@@ -36,17 +34,7 @@ function renderAgentWorkbench(workspaceId: WorkspaceId, data?: ArchiveDashboardD
 
 function renderAgentSuggestionsTab(analysis: ArchiveOntologyAnalysis): TemplateResult {
 	return html`
-		<div class="agent-workbench">
-			<div class="agent-mini-metrics">
-				${analysis.metrics.slice(0, 3).map(
-					(metric) => html`
-						<div class="agent-mini-metric">
-							<span>${metric.label}</span>
-							<strong>${metric.value}</strong>
-						</div>
-					`,
-				)}
-			</div>
+		<div class="decision-body-grid">
 			<div class="agent-card important">
 				<div class="agent-card-title">${icon("sparkles")} 当前上下文判断</div>
 				<ul class="agent-list">
@@ -83,31 +71,29 @@ function renderAgentSuggestionsTab(analysis: ArchiveOntologyAnalysis): TemplateR
 
 function renderAgentEvidenceTab(analysis: ArchiveOntologyAnalysis): TemplateResult {
 	return html`
-		<div class="agent-workbench">
-			<div class="agent-card compact">
-				<div class="agent-card-title">${icon("file-search")} 业务依据</div>
-				${analysis.evidenceRefs.length === 0
-					? html`<div class="sub">当前还没有可展示的业务依据。请先加载项目数据，或进入具体工作台查看文件、审核、签章、预检记录。</div>`
-					: html`
-						<div class="sub">系统已从当前项目数据中找到 ${analysis.evidenceRefs.length} 条可追溯依据。</div>
-						<div class="agent-items">
-							${analysis.evidenceRefs.slice(0, 2).map(
-								(evidence) => html`
-									<div class="agent-item">
-										<div>
-											<strong>${objectLabel(evidence.objectType)} · ${fieldLabel(evidence.field)}</strong>
-											<span>${evidence.excerpt ?? evidence.id}</span>
-										</div>
-										<div class="agent-item-meta">
-											<span class="badge blue">${evidenceSourceLabel(evidence.sourceType)}</span>
-											<span>可信度 ${Math.round((evidence.confidence ?? 0) * 100)}%</span>
-										</div>
+		<div class="agent-card compact">
+			<div class="agent-card-title">${icon("file-search")} 业务依据</div>
+			${analysis.evidenceRefs.length === 0
+				? html`<div class="sub">当前还没有可展示的业务依据。请先加载项目数据，或进入具体工作台查看文件、审核、签章、预检记录。</div>`
+				: html`
+					<div class="sub">系统已从当前项目数据中找到 ${analysis.evidenceRefs.length} 条可追溯依据。</div>
+					<div class="agent-items">
+						${analysis.evidenceRefs.slice(0, 4).map(
+							(evidence) => html`
+								<div class="agent-item">
+									<div>
+										<strong>${objectLabel(evidence.objectType)} · ${fieldLabel(evidence.field)}</strong>
+										<span>${evidence.excerpt ?? evidence.id}</span>
 									</div>
-								`,
-							)}
-						</div>
-					`}
-			</div>
+									<div class="agent-item-meta">
+										<span class="badge blue">${evidenceSourceLabel(evidence.sourceType)}</span>
+										<span>可信度 ${Math.round((evidence.confidence ?? 0) * 100)}%</span>
+									</div>
+								</div>
+							`,
+						)}
+					</div>
+				`}
 		</div>
 	`;
 }
@@ -115,20 +101,63 @@ function renderAgentEvidenceTab(analysis: ArchiveOntologyAnalysis): TemplateResu
 function renderAgentActionsTab(analysis: ArchiveOntologyAnalysis): TemplateResult {
 	const proposal = analysis.actionProposal;
 	return html`
-		<div class="agent-workbench">
-			<div class="action-proposal">
-				<div class="agent-card-title">${icon("clipboard-list")} 下一步办理建议</div>
-				<div class="agent-action-grid">
-					<div><span>办理事项</span><strong>${proposal.label}</strong></div>
-					<div><span>能否提交</span><strong>${proposal.canExecute ? "可以生成草案" : "暂不能提交"}</strong></div>
-					<div><span>确认要求</span><strong>${confirmationLabel(proposal.confirmationLevel)}</strong></div>
-					<div><span>办理人员</span><strong>${roleLabel(proposal.requiredProjectRole ?? proposal.requiredRole)}</strong></div>
-					<div><span>依据要求</span><strong>${proposal.evidenceRequired ? `需要，当前 ${proposal.evidenceCount} 条` : "不强制要求"}</strong></div>
-					<div><span>留痕要求</span><strong>${proposal.auditRequired ? "需要记录日志" : "不强制留痕"}</strong></div>
-				</div>
-				<div class="sub">提交后影响：${proposal.sideEffects.join("、")}</div>
+		<div class="action-proposal">
+			<div class="agent-card-title">${icon("clipboard-list")} 下一步办理建议</div>
+			<div class="agent-action-grid">
+				<div><span>办理事项</span><strong>${proposal.label}</strong></div>
+				<div><span>能否提交</span><strong>${proposal.canExecute ? "可以生成草案" : "暂不能提交"}</strong></div>
+				<div><span>确认要求</span><strong>${confirmationLabel(proposal.confirmationLevel)}</strong></div>
+				<div><span>办理人员</span><strong>${roleLabel(proposal.requiredProjectRole ?? proposal.requiredRole)}</strong></div>
+				<div><span>依据要求</span><strong>${proposal.evidenceRequired ? `需要，当前 ${proposal.evidenceCount} 条` : "不强制要求"}</strong></div>
+				<div><span>留痕要求</span><strong>${proposal.auditRequired ? "需要记录日志" : "不强制留痕"}</strong></div>
+			</div>
+			<div class="sub">提交后影响：${proposal.sideEffects.join("、")}</div>
+			<div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap">
+				<button class="btn primary" ?disabled=${!proposal.canExecute || !proposal.operationId}>${icon("check")} 确认办理草案</button>
+				<button class="btn" @click=${() => setActiveAgentPanelTab("evidence")}>${icon("eye")} 查看依据</button>
+				<button class="btn" @click=${() => { setActiveAgentPanelTab("suggestions"); }}>${icon("sparkles")} 查看建议</button>
 			</div>
 		</div>
+	`;
+}
+
+export function renderOntologyDecisionPanel(): TemplateResult {
+	const workspace = getWorkspace(activeWorkspaceId);
+	const data = appState.data;
+	const analysis = data ? analyzeArchiveWorkspace(activeWorkspaceId, data) : analyzeEmptyWorkspace(activeWorkspaceId);
+
+	return html`
+		<section class="ontology-decision-panel">
+			<div class="ontology-decision-head">
+				<div>
+					<div class="eyebrow">当前业务判断</div>
+					<h2>${workspace.label} · ${analysis.lifecycleStageLabel}</h2>
+					<div class="sub">先给出当前环节、关键对象、依据数量和下一步办理动作，右侧智能体负责解释和追问。</div>
+				</div>
+				${renderAgentTabs()}
+			</div>
+			<div class="ontology-summary-grid">
+				<div>
+					<span>当前阶段</span>
+					<strong>${analysis.lifecycleStageLabel}</strong>
+				</div>
+				<div>
+					<span>核心对象</span>
+					<strong>${objectLabelList(workspace.primaryObjects)}</strong>
+				</div>
+				<div>
+					<span>可追溯依据</span>
+					<strong>${analysis.evidenceRefs.length} 条</strong>
+				</div>
+				<div>
+					<span>下一动作</span>
+					<strong>${analysis.actionProposal.label}</strong>
+				</div>
+			</div>
+			<div class="decision-tab-body">
+				${renderOntologyDecisionBody(activeWorkspaceId, data)}
+			</div>
+		</section>
 	`;
 }
 
@@ -151,9 +180,7 @@ export function renderAgentPanel(): TemplateResult {
 					<div>关注：${objectLabelList(workspace.primaryObjects)}</div>
 					<div>依据：${analysis.evidenceRefs.length} 条</div>
 				</div>
-				${renderAgentTabs()}
 			</div>
-			${renderAgentWorkbench(activeWorkspaceId, data)}
 			<div class="agent-chat-shell">
 				${chatPanel
 					? chatPanel

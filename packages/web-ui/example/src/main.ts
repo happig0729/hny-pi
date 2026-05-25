@@ -33,12 +33,16 @@ import { ContextProvider } from "@lit/context";
 import { icon } from "@mariozechner/mini-lit";
 import { Button } from "@mariozechner/mini-lit/dist/Button.js";
 import { Input } from "@mariozechner/mini-lit/dist/Input.js";
-import { buildArchiveOperationFingerprint, createArchiveApiTool, readArchiveOperationRequest } from "./archive-agent-tool.js";
 import {
 	ARCHIVE_MANAGER_SYSTEM_PROMPT,
 	ARCHIVE_QUICK_PROMPTS,
 	createArchiveActionCancelledMessages,
 } from "./archive-a2ui.js";
+import {
+	buildArchiveOperationFingerprint,
+	createArchiveApiTool,
+	readArchiveOperationRequest,
+} from "./archive-agent-tool.js";
 import { createSystemNotification, customConvertToLlm, registerCustomMessageRenderers } from "./custom-messages.js";
 import "@a2ui/lit/v0_9";
 
@@ -292,7 +296,10 @@ function normalizeA2uiMessages(messages: A2uiMessage[]): A2uiMessage[] {
 				version,
 				createSurface: {
 					surfaceId: "default",
-					catalogId: typeof catalogId === "string" ? catalogId : "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
+					catalogId:
+						typeof catalogId === "string"
+							? catalogId
+							: "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
 				},
 			} as A2uiMessage,
 			...messages,
@@ -627,7 +634,12 @@ function normalizeA2uiMessages(messages: A2uiMessage[]): A2uiMessage[] {
 				// Fix List children: LLM often outputs "children":["template-id"] instead of {componentId,path}
 				for (const comp of dedupedList) {
 					const compName = getComponentName(comp);
-					if (compName === "List" && Array.isArray(comp.children) && comp.children.length === 1 && typeof comp.children[0] === "string") {
+					if (
+						compName === "List" &&
+						Array.isArray(comp.children) &&
+						comp.children.length === 1 &&
+						typeof comp.children[0] === "string"
+					) {
 						const templateId = comp.children[0] as string;
 						const template = dedupedList.find((c) => c.id === templateId);
 						if (template && typeof template.path === "string") {
@@ -678,7 +690,10 @@ function parseIncrementalA2uiJson(text: string): A2uiMessage[] {
 	// Repair common LLM JSON errors
 	const repaired = jsonContent
 		// Missing opening brace before key: },"version":" -> },{"version":"
-		.replace(/},(\s*"(version|createSurface|updateComponents|updateDataModel|deleteSurface)")/g, (_, cap) => `},{${cap}`)
+		.replace(
+			/},(\s*"(version|createSurface|updateComponents|updateDataModel|deleteSurface)")/g,
+			(_, cap) => `},{${cap}`,
+		)
 		// Strip backticks and trim whitespace from catalogId values
 		// LLM wraps: " `https://...` " -> "https://..."
 		.replace(/"catalogId"\s*:\s*"\s*`\s*([^"]*?)\s*`\s*"/g, '"catalogId":"$1"')
@@ -966,7 +981,8 @@ Feel free to use these tools when needed to provide accurate and helpful respons
 					if (agent.state.errorMessage) {
 						a2uiError = agent.state.errorMessage;
 					} else if (!a2uiError && a2uiMessages.length === 0 && a2uiRawText.length > 0) {
-						a2uiError = "LLM 返回了内容但未包含有效的 A2UI JSON。请展开下方「Raw LLM Output Stream」查看原始输出。";
+						a2uiError =
+							"LLM 返回了内容但未包含有效的 A2UI JSON。请展开下方「Raw LLM Output Stream」查看原始输出。";
 					}
 					renderApp();
 				}

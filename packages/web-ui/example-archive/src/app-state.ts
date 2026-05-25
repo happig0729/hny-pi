@@ -78,6 +78,8 @@ export let appState: AppState = { loadState: "loading" };
 export let archiveAgent: Agent | undefined;
 export let chatPanel: ChatPanel | undefined;
 export let agentUnsubscribe: (() => void) | undefined;
+export let compilationFormData: Record<string, string | null> = {};
+export let selectedCompilationId: number | undefined;
 
 export function setArchiveAgent(agent: Agent): void { archiveAgent = agent; }
 export function setChatPanel(panel: ChatPanel): void { chatPanel = panel; }
@@ -323,6 +325,16 @@ export function updateEntityFormSubmitting(submitting: boolean, submitted: boole
 
 export function setVisualization(state: VisualizationState | undefined): void {
 	appState = { ...appState, visualization: state };
+	onStateChanged?.();
+}
+
+export function setCompilationFormData(data: Record<string, string | null>): void {
+	compilationFormData = data;
+	onStateChanged?.();
+}
+
+export function setSelectedCompilationId(id: number | undefined): void {
+	selectedCompilationId = id;
 	onStateChanged?.();
 }
 

@@ -5,10 +5,16 @@ import { type Static, Type } from "typebox";
 const ENDPOINTS: Record<string, ApiEndpoint> = API_ENDPOINTS;
 
 const archiveApiSchema = Type.Object({
-	mode: Type.Union([Type.Literal("list_operations"), Type.Literal("describe_operation"), Type.Literal("call_operation")], {
-		description: "Use list_operations to discover APIs, describe_operation to inspect one API, and call_operation to execute it.",
-	}),
-	keyword: Type.Optional(Type.String({ description: "Optional operationId, tag, path, or summary keyword for list_operations." })),
+	mode: Type.Union(
+		[Type.Literal("list_operations"), Type.Literal("describe_operation"), Type.Literal("call_operation")],
+		{
+			description:
+				"Use list_operations to discover APIs, describe_operation to inspect one API, and call_operation to execute it.",
+		},
+	),
+	keyword: Type.Optional(
+		Type.String({ description: "Optional operationId, tag, path, or summary keyword for list_operations." }),
+	),
 	tag: Type.Optional(Type.String({ description: "Optional OpenAPI tag filter for list_operations." })),
 	operationId: Type.Optional(Type.String({ description: "OpenAPI operationId to describe or call." })),
 	pathParams: Type.Optional(Type.Record(Type.String(), Type.Union([Type.String(), Type.Number()]))),
@@ -70,7 +76,9 @@ export interface ArchiveApiToolOptions {
 
 const DESTRUCTIVE_WORDS = ["delete", "remove", "revoke", "reject", "reset", "archive", "disable", "logout"];
 
-export function createArchiveApiTool(options: ArchiveApiToolOptions): AgentTool<typeof archiveApiSchema, ArchiveApiResult> {
+export function createArchiveApiTool(
+	options: ArchiveApiToolOptions,
+): AgentTool<typeof archiveApiSchema, ArchiveApiResult> {
 	return {
 		label: "Archive API",
 		name: "archive_api",
@@ -162,7 +170,9 @@ export function buildArchiveOperationFingerprint(request: ArchiveOperationReques
 	});
 }
 
-export function readArchiveOperationRequest(value: unknown): { confirmationKey: string; request: ArchiveOperationRequest } | undefined {
+export function readArchiveOperationRequest(
+	value: unknown,
+): { confirmationKey: string; request: ArchiveOperationRequest } | undefined {
 	if (!isRecord(value)) return undefined;
 	const operationId = getString(value.operationId);
 	const confirmationKey = getString(value.confirmationKey);
@@ -192,7 +202,8 @@ function listOperations(keyword?: string, tag?: string): ArchiveOperationDetails
 		.filter((operation) => {
 			if (normalizedTag && operation.tag.toLowerCase() !== normalizedTag) return false;
 			if (!normalizedKeyword) return true;
-			const haystack = `${operation.operationId} ${operation.method} ${operation.path} ${operation.tag} ${operation.summary}`.toLowerCase();
+			const haystack =
+				`${operation.operationId} ${operation.method} ${operation.path} ${operation.tag} ${operation.summary}`.toLowerCase();
 			return haystack.includes(normalizedKeyword);
 		})
 		.slice(0, 40);
@@ -274,7 +285,10 @@ async function callOperation(
 	};
 }
 
-function buildPath(operation: ArchiveOperationDetails, pathParams?: Record<string, string | number>): { ok: true; value: string } | { ok: false; error: string } {
+function buildPath(
+	operation: ArchiveOperationDetails,
+	pathParams?: Record<string, string | number>,
+): { ok: true; value: string } | { ok: false; error: string } {
 	let path = operation.path;
 	for (const param of operation.pathParams) {
 		const value = pathParams?.[param.name];
@@ -286,8 +300,14 @@ function buildPath(operation: ArchiveOperationDetails, pathParams?: Record<strin
 	return { ok: true, value: path };
 }
 
-function buildUrl(baseUrl: string, operation: ArchiveOperationDetails, path: string, query?: Record<string, unknown>): string {
-	const resolvedBaseUrl = operation.tag === "health" || operation.tag === "metrics" ? baseUrl.replace(/\/api\/v1\/?$/, "") : baseUrl;
+function buildUrl(
+	baseUrl: string,
+	operation: ArchiveOperationDetails,
+	path: string,
+	query?: Record<string, unknown>,
+): string {
+	const resolvedBaseUrl =
+		operation.tag === "health" || operation.tag === "metrics" ? baseUrl.replace(/\/api\/v1\/?$/, "") : baseUrl;
 	const url = new URL(`${resolvedBaseUrl}${path}`, window.location.origin);
 	if (query) {
 		for (const [key, value] of Object.entries(query)) {
@@ -341,7 +361,12 @@ function formatOperationDetails(operation: ArchiveOperationDetails): string {
 	].join("\n");
 }
 
-function formatCallResult(operation: ArchiveOperationDetails, status: number, statusText: string, body: unknown): string {
+function formatCallResult(
+	operation: ArchiveOperationDetails,
+	status: number,
+	statusText: string,
+	body: unknown,
+): string {
 	const bodyText = typeof body === "string" ? body : JSON.stringify(body, null, 2);
 	return `${operation.method} ${operation.path} -> ${status} ${statusText}\n\n${bodyText}`;
 }

@@ -1,5 +1,5 @@
-import { API_ENDPOINTS } from "@earendil-works/pi-web-ui";
 import type { A2uiMessage } from "@a2ui/web_core/v0_9";
+import { API_ENDPOINTS } from "@earendil-works/pi-web-ui";
 import { describeArchiveOperation } from "./archive-agent-tool.js";
 
 const A2UI_CATALOG_ID = "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json";
@@ -8,7 +8,9 @@ const OPERATION_CATALOG = Object.entries(API_ENDPOINTS)
 	.map(([operationId, endpoint]) => {
 		const operation = describeArchiveOperation(operationId);
 		const risk = operation?.risk ?? "read";
-		const params = endpoint.params.map((param) => `${param.name}:${param.in}:${param.type}${param.required ? ":required" : ""}`).join(", ");
+		const params = endpoint.params
+			.map((param) => `${param.name}:${param.in}:${param.type}${param.required ? ":required" : ""}`)
+			.join(", ");
 		return `${operationId} | ${endpoint.method} ${endpoint.path} | ${endpoint.tag} | ${risk} | ${endpoint.summary}${params ? ` | params: ${params}` : ""}${endpoint.hasBody ? " | body: yes" : ""}`;
 	})
 	.join("\n");
