@@ -1,0 +1,6162 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: 青岛工程档案管理平台 API
+servers:
+  - url: /api/v1
+    description: Versioned API path
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: health
+    description: Health operations
+  - name: metrics
+    description: Prometheus 指标
+  - name: projects
+    description: 项目管理
+  - name: units
+    description: 单位工程管理
+  - name: documents
+    description: 资料编制
+  - name: reviews
+    description: 审核流程
+  - name: archives
+    description: 档案管理
+  - name: users
+    description: 用户管理
+  - name: templates
+    description: 模板管理
+  - name: auth
+    description: 认证与授权
+  - name: seals
+    description: 印章认证
+  - name: tenants
+    description: 租户管理（SaaS）
+  - name: system
+    description: 系统管理
+  - name: ai
+    description: AI 助手
+  - name: form-fill
+    description: 智能表单填充
+  - name: compliance-precheck
+    description: 归档合规预检
+  - name: api-keys
+    description: API Key 管理
+  - name: wechat
+    description: 微信小程序登录
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /metrics:
+    get:
+      operationId: getMetrics
+      tags: [metrics]
+      summary: 获取 Prometheus 指标
+      description: 返回 Prometheus text exposition 格式的运行指标，供监控系统抓取。
+      responses:
+        "200":
+          description: Prometheus 指标文本
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: 获取项目列表
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, archived, completed]
+        - name: keyword
+          in: query
+          description: 支持按项目名称或编号模糊搜索
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: 项目列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectListResponse"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: 创建项目
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: 项目创建成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{projectId}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: 获取项目详情
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 项目详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: 项目不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateProject
+      tags: [projects]
+      summary: 更新项目
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: 删除项目
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /projects/join:
+    post:
+      operationId: joinProject
+      tags: [projects]
+      summary: 通过接入码加入项目
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinProjectRequest"
+      responses:
+        "201":
+          description: 加入成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JoinProjectResponse"
+        "401":
+          description: 接入密码错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: 接入码对应的项目不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: 已经是项目成员
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/stats:
+    get:
+      operationId: getProjectStats
+      tags: [projects]
+      summary: 获取项目统计
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 项目统计
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats"
+
+  /projects/{projectId}/units:
+    get:
+      operationId: listUnits
+      tags: [units]
+      summary: 获取单位工程列表
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 单位工程列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Unit"
+    post:
+      operationId: createUnit
+      tags: [units]
+      summary: 创建单位工程
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUnitRequest"
+      responses:
+        "201":
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Unit"
+
+  /projects/{projectId}/units/{unitId}:
+    put:
+      operationId: updateUnit
+      tags: [units]
+      summary: 更新单位工程
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: unitId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUnitRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Unit"
+    delete:
+      operationId: deleteUnit
+      tags: [units]
+      summary: 删除单位工程
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: unitId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /projects/{projectId}/documents:
+    get:
+      operationId: listDocuments
+      tags: [documents]
+      summary: 获取资料列表
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: unitId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, under_review, approved, rejected]
+        - name: category
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 资料列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Document"
+    post:
+      operationId: createDocument
+      tags: [documents]
+      summary: 创建资料
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDocumentRequest"
+      responses:
+        "201":
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+
+  /projects/{projectId}/documents/{documentId}:
+    get:
+      operationId: getDocument
+      tags: [documents]
+      summary: 获取资料详情
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 资料详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+    put:
+      operationId: updateDocument
+      tags: [documents]
+      summary: 更新资料
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDocumentRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+    delete:
+      operationId: deleteDocument
+      tags: [documents]
+      summary: 删除资料
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /projects/{projectId}/documents/{documentId}/submit:
+    post:
+      operationId: submitDocumentForReview
+      tags: [documents]
+      summary: 提交审核
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 提交成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+  /projects/{projectId}/instances:
+    get:
+      operationId: listCompilationInstances
+      tags: [documents]
+      summary: 获取编制实例列表
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: itemId
+          in: query
+          schema:
+            type: string
+        - name: unitId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 编制实例列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer }
+                  message: { type: string }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CompilationInstance"
+                  success: { type: boolean }
+    post:
+      operationId: createCompilationInstance
+      tags: [documents]
+      summary: 创建编制实例
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCompilationInstanceRequest"
+      responses:
+        "201":
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer }
+                  message: { type: string }
+                  data:
+                    $ref: "#/components/schemas/CompilationInstance"
+                  success: { type: boolean }
+
+  /projects/{projectId}/instances/{instanceId}:
+    get:
+      operationId: getCompilationInstance
+      tags: [documents]
+      summary: 获取编制实例详情
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 实例详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer }
+                  message: { type: string }
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/CompilationInstance"
+                      - type: object
+                        properties:
+                          formData:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                id: { type: integer }
+                                instanceId: { type: integer }
+                                fieldKey: { type: string }
+                                fieldValue: { type: string, nullable: true }
+                  success: { type: boolean }
+    put:
+      operationId: updateCompilationInstance
+      tags: [documents]
+      summary: 更新编制实例
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCompilationInstanceRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteCompilationInstance
+      tags: [documents]
+      summary: 删除编制实例
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 删除成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /projects/{projectId}/instances/{instanceId}/form-data:
+    get:
+      operationId: getCompilationFormData
+      tags: [documents]
+      summary: 获取表单数据
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 表单数据
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    put:
+      operationId: updateCompilationFormData
+      tags: [documents]
+      summary: 写入表单数据
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompilationFormDataUpsertRequest"
+      responses:
+        "200":
+          description: 更新成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /projects/{projectId}/instances/{instanceId}/form-data/{fieldKey}:
+    delete:
+      operationId: deleteCompilationFormField
+      tags: [documents]
+      summary: 删除表单字段
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: instanceId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: fieldKey
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 删除成功
+
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /reviews:
+    get:
+      operationId: listReviews
+      tags: [reviews]
+      summary: 获取审核任务列表
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+        - name: assignedTo
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 审核任务列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Review"
+
+  /reviews/{reviewId}:
+    get:
+      operationId: getReview
+      tags: [reviews]
+      summary: 获取审核详情
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 审核详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+
+  /reviews/{reviewId}/approve:
+    post:
+      operationId: approveReview
+      tags: [reviews]
+      summary: 审核通过
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewActionRequest"
+      responses:
+        "200":
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+
+  /reviews/{reviewId}/reject:
+    post:
+      operationId: rejectReview
+      tags: [reviews]
+      summary: 审核驳回
+      parameters:
+        - name: reviewId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewActionRequest"
+      responses:
+        "200":
+          description: 操作成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Review"
+
+  /reviews/hints:
+    post:
+      operationId: generateReviewHints
+      tags: [reviews]
+      summary: 生成审核智能提示
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewHintsRequest"
+      responses:
+        "200":
+          description: 审核提示生成成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewHintsResponse"
+        "400":
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: 未授权
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/archive:
+    post:
+      operationId: archiveProject
+      tags: [archives]
+      summary: 归档项目
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 归档成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArchiveResult"
+
+  /projects/{projectId}/package:
+    post:
+      operationId: packageProject
+      tags: [archives]
+      summary: 生成封装包
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 封装包生成成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackageResult"
+
+  /projects/{projectId}/access-code:
+    get:
+      operationId: getProjectAccessCode
+      tags: [projects]
+      summary: 获取项目接入码和密码（仅项目创建者可查看）
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 接入码信息
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessCodeResponse"
+        "403":
+          description: 仅项目创建者可查看
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: 项目不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/access-code/reset:
+    post:
+      operationId: resetProjectAccessPassword
+      tags: [projects]
+      summary: 重置项目接入密码（仅项目创建者可操作）
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 重置成功，返回新接入码和密码
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessCodeResponse"
+        "403":
+          description: 仅项目创建者可操作
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: 项目不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{projectId}/members:
+    get:
+      operationId: listProjectMembers
+      tags: [project-members]
+      summary: 获取项目成员列表
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 项目成员列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: addProjectMember
+      tags: [project-members]
+      summary: 添加项目成员
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, role]
+              properties:
+                userId:
+                  type: integer
+                role:
+                  type: string
+                  enum: [project_admin, data_admin, data_clerk]
+      responses:
+        "201":
+          description: 添加成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /projects/{projectId}/members/{memberId}:
+    put:
+      operationId: updateProjectMember
+      tags: [project-members]
+      summary: 更新项目成员角色
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [project_admin, data_admin, data_clerk]
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: removeProjectMember
+      tags: [project-members]
+      summary: 移除项目成员
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 移除成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 移除成功
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: 获取用户列表
+      parameters:
+        - name: status
+          in: query
+          description: 用户状态 (active, inactive(即闲置))
+          schema:
+            type: string
+            enum: [active, inactive]
+        - name: keyword
+          in: query
+          description: 按用户名、姓名、邮箱搜索
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 用户列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: 创建用户
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: 用户创建成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{userId}:
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: 更新用户
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: 删除用户
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /users/{userId}/reset-password:
+    post:
+      operationId: resetUserPassword
+      tags: [users]
+      summary: 重置用户密码
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: 密码重置成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /users/{userId}/bind-tenant:
+    put:
+      operationId: bindUserTenant
+      tags: [users]
+      summary: 将公共用户池用户绑定到租户
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tenantId]
+              properties:
+                tenantId:
+                  type: integer
+      responses:
+        "200":
+          description: 绑定成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /departments:
+    get:
+      operationId: listDepartments
+      tags: [departments]
+      summary: 获取部门列表
+      responses:
+        "200":
+          description: 部门列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createDepartment
+      tags: [departments]
+      summary: 创建部门
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /departments/{id}:
+    put:
+      operationId: updateDepartment
+      tags: [departments]
+      summary: 修改部门
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteDepartment
+      tags: [departments]
+      summary: 删除部门
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /templates:
+    get:
+      operationId: listTemplates
+      tags: [templates]
+      summary: 获取模板列表
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 模板列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Template"
+
+  /templates/{id}/enable:
+    post:
+      operationId: enableTemplate
+      tags: [templates]
+      summary: 启用标准模板并同步到所有租户
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: 启用成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /templates/{id}/disable:
+    post:
+      operationId: disableTemplate
+      tags: [templates]
+      summary: 停用标准模板
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "201":
+          description: 停用成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [projects]
+      summary: 获取仪表盘统计数据
+      responses:
+        "200":
+          description: 统计数据
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: 用户登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+              required: [username, password]
+      responses:
+        "200":
+          description: 登录成功，返回 Token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokenResponse"
+        "401":
+          description: 用户名或密码错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: 用户注册
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, name, inviteCode]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                name:
+                  type: string
+                phone:
+                  type: string
+                inviteCode:
+                  type: string
+      responses:
+        "201":
+          description: 注册成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokenResponse"
+
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      tags: [auth]
+      summary: 刷新 AccessToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+              required: [refreshToken]
+      responses:
+        "200":
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokenResponse"
+        "401":
+          description: RefreshToken 无效或已过期
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: 登出
+      description: |
+        登出当前会话。
+        - 若提供 refreshToken，则仅销毁对应 Session。
+        - 若不提供 refreshToken，则销毁该用户所有 Session（全端登出）。
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+                  description: 可选。不传则全端登出。
+      responses:
+        "200":
+          description: 登出成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: 获取当前登录用户信息
+      responses:
+        "200":
+          description: 当前用户信息
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /seals:
+    get:
+      operationId: listSeals
+      tags: [seals]
+      summary: 获取印章列表
+      responses:
+        "200":
+          description: 印章列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createSeal
+      tags: [seals]
+      summary: 创建印章
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                type:
+                  type: string
+                  enum: [official, personal, contract]
+              required: [name, type]
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /seals/stats:
+    get:
+      operationId: getSealStats
+      tags: [seals]
+      summary: 印章统计
+      responses:
+        "200":
+          description: 统计数据
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /seals/my:
+    get:
+      operationId: listMySeals
+      tags: [seals]
+      summary: 获取当前用户的签章认证记录
+      responses:
+        "200":
+          description: 当前用户签章认证记录
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /seals/{id}/approve:
+    put:
+      operationId: approveSeal
+      tags: [seals]
+      summary: 审批通过签章认证
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                validDays:
+                  type: integer
+      responses:
+        "200":
+          description: 审批通过
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /seals/{id}/reject:
+    put:
+      operationId: rejectSeal
+      tags: [seals]
+      summary: 拒绝签章认证
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: 已拒绝
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /seals/{id}:
+    put:
+      operationId: updateSeal
+      tags: [seals]
+      summary: 更新印章
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteSeal
+      tags: [seals]
+      summary: 删除印章
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /tenants:
+    get:
+      operationId: listTenants
+      tags: [tenants]
+      summary: 获取租户列表
+      responses:
+        "200":
+          description: 租户列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createTenant
+      tags: [tenants]
+      summary: 创建租户
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+              required: [name, code]
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /tenants/stats:
+    get:
+      operationId: getTenantStats
+      tags: [tenants]
+      summary: 租户统计数据
+      responses:
+        "200":
+          description: 统计数据
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /tenants/{id}:
+    put:
+      operationId: updateTenant
+      tags: [tenants]
+      summary: 更新租户
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteTenant
+      tags: [tenants]
+      summary: 删除租户
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /system/positions:
+    get:
+      operationId: listPositions
+      tags: [system]
+      summary: 获取岗位列表
+      responses:
+        "200":
+          description: 岗位列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createPosition
+      tags: [system]
+      summary: 创建岗位
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+              required: [name, code]
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /system/roles:
+    get:
+      operationId: listRoles
+      tags: [system]
+      summary: 获取角色列表
+      responses:
+        "200":
+          description: 角色列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createRole
+      tags: [system]
+      summary: 创建角色
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+              required: [name]
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /system/menus:
+    get:
+      operationId: listMenus
+      tags: [system]
+      summary: 获取菜单列表
+      responses:
+        "200":
+          description: 菜单列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createMenu
+      tags: [system]
+      summary: 创建菜单
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+              required: [name]
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /system/dictionaries:
+    get:
+      operationId: listDictionaries
+      tags: [system]
+      summary: 获取字典列表
+      responses:
+        "200":
+          description: 字典列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createDictionary
+      tags: [system]
+      summary: 创建字典
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/DictionaryItem"
+                remark:
+                  type: string
+              required: [name, code]
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /system/notices:
+    get:
+      operationId: listNotices
+      tags: [system]
+      summary: 获取公告列表
+      responses:
+        "200":
+          description: 公告列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createNotice
+      tags: [system]
+      summary: 创建公告
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+              required: [title]
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /system/logs:
+    get:
+      operationId: listOperationLogs
+      tags: [system]
+      summary: 获取操作日志列表
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: 操作日志列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createOperationLog
+      tags: [system]
+      summary: 创建操作日志
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                module:
+                  type: string
+                ip:
+                  type: string
+              required: [action]
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  # 企业管理
+  /enterprises:
+    get:
+      operationId: listEnterprises
+      tags: [enterprises]
+      summary: 获取企业列表
+      responses:
+        "200":
+          description: 企业列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createEnterprise
+      tags: [enterprises]
+      summary: 创建企业
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                type: { type: string }
+                creditCode: { type: string }
+              required: [name, type]
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /enterprises/{id}:
+    get:
+      operationId: getEnterprise
+      tags: [enterprises]
+      summary: 获取企业详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 企业详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    put:
+      operationId: updateEnterprise
+      tags: [enterprises]
+      summary: 更新企业
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteEnterprise
+      tags: [enterprises]
+      summary: 删除企业
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  # 签章任务
+  /signing-tasks:
+    get:
+      operationId: listSigningTasks
+      tags: [signing]
+      summary: 获取签章任务列表
+      parameters:
+        - name: projectId
+          in: query
+          required: false
+          schema: { type: integer }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: 签章任务列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+    post:
+      operationId: createSigningTask
+      tags: [signing]
+      summary: 创建签章任务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                projectId:
+                  type: integer
+                catalogItemId:
+                  type: string
+                docId:
+                  type: integer
+                docName:
+                  type: string
+                nodes:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    properties:
+                      label:
+                        type: string
+                      type:
+                        type: string
+                        enum: [person, company]
+                      assignee:
+                        type: integer
+                      sortOrder:
+                        type: integer
+                    required:
+                      - label
+                      - type
+                      - assignee
+              required:
+                - projectId
+                - catalogItemId
+                - docName
+                - nodes
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /signing-tasks/{id}:
+    get:
+      operationId: getSigningTask
+      tags: [signing]
+      summary: 获取签章任务详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 签章任务详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    put:
+      operationId: updateSigningTask
+      tags: [signing]
+      summary: 更新签章任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteSigningTask
+      tags: [signing]
+      summary: 删除签章任务
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /signing-tasks/{id}/nodes/{nodeId}:
+    put:
+      operationId: updateSigningNode
+      tags: [signing]
+      summary: 更新签章节点
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: nodeId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  # 仪表盘
+  /dashboard/monthly-trends:
+    get:
+      operationId: getMonthlyTrends
+      tags: [projects]
+      summary: 获取月度趋势数据
+      responses:
+        "200":
+          description: 月度趋势数据
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  # 我的资料
+  /my-document:
+    get:
+      operationId: getMyDocument
+      tags: [documents]
+      summary: 获取我的资料列表
+      responses:
+        "200":
+          description: 我的资料列表
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  # 修改密码
+  /auth/password:
+    put:
+      operationId: changePassword
+      tags: [auth]
+      summary: 修改密码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                oldPassword: { type: string }
+                newPassword: { type: string }
+              required: [oldPassword, newPassword]
+      responses:
+        "200":
+          description: 修改成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  # 上传文件
+  /projects/{projectId}/uploads:
+    get:
+      operationId: listUploadFiles
+      tags: [documents]
+      summary: 获取上传文件列表
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: status
+          in: query
+          required: false
+          schema: { type: string }
+        - name: nodeId
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: 上传文件列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UploadFile"
+    post:
+      operationId: createUploadFile
+      tags: [documents]
+      summary: 创建上传文件记录
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /projects/{projectId}/uploads/file:
+    post:
+      operationId: uploadFile
+      tags: [documents]
+      summary: 上传文件（multipart/form-data）
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required: [file]
+      responses:
+        "201":
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/UploadFile"
+
+  /projects/{projectId}/uploads/{fileId}/preview:
+    get:
+      operationId: getFilePreview
+      tags: [documents]
+      summary: 获取文件预览
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 文件预览数据
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      fileName:
+                        type: string
+                      title:
+                        type: string
+                      mimeType:
+                        type: string
+                      fileUrl:
+                        type: string
+                      extractedText:
+                        type: string
+                      metadata:
+                        type: object
+                        properties:
+                          fileSize:
+                            type: integer
+                          pages:
+                            type: integer
+                          carrier:
+                            type: string
+                          compiler:
+                            type: string
+                          compileDate:
+                            type: string
+
+  /projects/{projectId}/uploads/{fileId}:
+    get:
+      operationId: getUploadFile
+      tags: [documents]
+      summary: 获取上传文件详情
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: fileId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 上传文件详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/UploadFile"
+    put:
+      operationId: updateUploadFile
+      tags: [documents]
+      summary: 更新上传文件
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: fileId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/UploadFile"
+    delete:
+      operationId: deleteUploadFile
+      tags: [documents]
+      summary: 删除上传文件
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: fileId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /projects/{projectId}/uploads/{fileId}/rename:
+    post:
+      operationId: renameUploadFile
+      tags: [documents]
+      summary: 重命名上传文件
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+              required: [title]
+      responses:
+        "200":
+          description: 重命名成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /projects/{projectId}/uploads/{fileId}/replace:
+    post:
+      operationId: replaceUploadFile
+      tags: [documents]
+      summary: 替换上传文件
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required: [file]
+      responses:
+        "200":
+          description: 替换成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /projects/{projectId}/uploads/{fileId}/versions:
+    get:
+      operationId: listUploadFileVersions
+      tags: [documents]
+      summary: 获取上传文件版本列表
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 版本列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UploadFileVersion"
+
+  /projects/{projectId}/uploads/{fileId}/versions/{versionId}:
+    get:
+      operationId: getUploadFileVersion
+      tags: [documents]
+      summary: 获取指定版本详情
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: versionId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 版本详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/UploadFileVersion"
+
+  /projects/{projectId}/uploads/bulk-submit:
+    post:
+      operationId: bulkSubmitUploadFiles
+      tags: [documents]
+      summary: 批量提交上传文件
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fileIds:
+                  type: array
+                  items:
+                    type: integer
+                  minItems: 1
+                directoryUpdates:
+                  type: object
+                  description: "fileId -> { nodeId, nodeLabel, title }"
+                  additionalProperties:
+                    type: object
+                    properties:
+                      nodeId:
+                        type: string
+                      nodeLabel:
+                        type: string
+                      title:
+                        type: string
+              required: [fileIds]
+      responses:
+        "200":
+          description: 批量提交结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: integer
+                  message:
+                    type: string
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      results:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            fileId:
+                              type: integer
+                            success:
+                              type: boolean
+                            error:
+                              type: string
+
+  /projects/{projectId}/uploads/{fileId}/collect:
+    post:
+      operationId: collectUploadFile
+      tags: [documents]
+      summary: 采集上传文件
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: fileId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 采集成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /projects/{projectId}/uploads/{fileId}/return:
+    post:
+      operationId: returnUploadFile
+      tags: [documents]
+      summary: 退回上传文件
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: fileId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200":
+          description: 退回成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  # 邀请链接
+  /projects/{projectId}/invites/links:
+    get:
+      operationId: listInviteLinks
+      tags: [projects]
+      summary: 获取邀请链接列表
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: 邀请链接列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createInviteLink
+      tags: [projects]
+      summary: 创建邀请链接
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inviteRemark:
+                  type: string
+                  description: 邀请备注
+                role:
+                  type: string
+                  enum: [data_admin, data_clerk]
+                  default: data_clerk
+                  description: 邀请角色
+                expiry:
+                  type: string
+                  enum: [30d, 90d, permanent]
+                  default: permanent
+                  description: 链接有效期
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /projects/{projectId}/invites/links/{linkId}/revoke:
+    put:
+      operationId: revokeInviteLink
+      tags: [projects]
+      summary: 撤销邀请链接
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: linkId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 撤销成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /projects/{projectId}/invites/links/{linkId}/refresh:
+    post:
+      operationId: refreshInviteLink
+      tags: [projects]
+      summary: 刷新邀请链接
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: linkId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 刷新成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /projects/{projectId}/invites/members:
+    get:
+      operationId: listInviteMembers
+      tags: [projects]
+      summary: 获取邀请成员列表
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: 邀请成员列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: addInviteMember
+      tags: [projects]
+      summary: 添加邀请成员
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 添加成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  # 公开邀请预览
+  /invite-links/by-code/{code}:
+    get:
+      operationId: getInvitePreviewByCode
+      tags: [invite-links]
+      summary: 公开邀请预览
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: 邀请预览信息
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitePreviewResponse"
+  # 接受邀请
+  /invite-links/accept:
+    post:
+      operationId: acceptInvite
+      tags: [invite-links]
+      summary: 接受邀请
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+              required: [code]
+      responses:
+        "201":
+          description: 接受成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptInviteResponse"
+        "403":
+          description: 管理型账号不允许通过邀请链接加入
+        "404":
+          description: 邀请链接无效
+  # 归档包
+  /projects/{projectId}/packages:
+    get:
+      operationId: listArchivePackages
+      tags: [archives]
+      summary: 获取归档包列表
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: 归档包列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createArchivePackage
+      tags: [archives]
+      summary: 创建归档包
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /projects/{projectId}/packages/{packageId}:
+    get:
+      operationId: getArchivePackage
+      tags: [archives]
+      summary: 获取归档包详情
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: packageId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 归档包详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    put:
+      operationId: updateArchivePackage
+      tags: [archives]
+      summary: 更新归档包
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: packageId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteArchivePackage
+      tags: [archives]
+      summary: 删除归档包
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: packageId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  # 合规预检
+  /projects/{projectId}/prechecks:
+    get:
+      operationId: listPrechecks
+      tags: [compliance-precheck]
+      summary: 获取预检历史列表
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 预检历史列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: runPrecheck
+      tags: [compliance-precheck]
+      summary: 执行预检
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                skipCompleteness:
+                  type: array
+                  items:
+                    type: string
+                skipFormat:
+                  type: array
+                  items:
+                    type: string
+                skipContent:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: 预检完成
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /projects/{projectId}/prechecks/latest:
+    get:
+      operationId: getLatestPrecheck
+      tags: [compliance-precheck]
+      summary: 获取最新预检结果
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 最新预检结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /projects/{projectId}/prechecks/{precheckId}:
+    get:
+      operationId: getPrecheck
+      tags: [compliance-precheck]
+      summary: 获取预检详情
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: precheckId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 预检详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: 预检记录不存在
+
+  /projects/{projectId}/prechecks/{precheckId}/rerun:
+    post:
+      operationId: rerunPrecheck
+      tags: [compliance-precheck]
+      summary: 重新执行预检
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: precheckId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 重新预检完成
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # 采集项
+  /projects/{projectId}/collection/items:
+    get:
+      operationId: listCollectionItems
+      tags: [documents]
+      summary: 获取采集项列表
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: 采集项列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createCollectionItem
+      tags: [documents]
+      summary: 创建采集项
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /projects/{projectId}/collection/items/{itemId}:
+    put:
+      operationId: updateCollectionItem
+      tags: [documents]
+      summary: 更新采集项
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteCollectionItem
+      tags: [documents]
+      summary: 删除采集项
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /projects/{projectId}/collection/items/{itemId}/status:
+    get:
+      operationId: getCollectionItemStatus
+      tags: [documents]
+      summary: 获取采集项状态
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: 采集项状态
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  # 项目扩展
+  /projects/{projectId}/extensions:
+    get:
+      operationId: listProjectExtensions
+      tags: [projects]
+      summary: 获取项目扩展字段
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        "200":
+          description: 项目扩展字段
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    put:
+      operationId: updateProjectExtensions
+      tags: [projects]
+      summary: 更新项目扩展字段
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+  /projects/{projectId}/extensions/units/{unitId}:
+    get:
+      operationId: listUnitExtensions
+      tags: [units]
+      summary: 获取单位工程扩展字段
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: unitId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 单位工程扩展字段
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    put:
+      operationId: updateUnitExtensions
+      tags: [units]
+      summary: 更新单位工程扩展字段
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: fileType
+          in: query
+          required: false
+          schema: { type: string }
+        - name: unitId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Unit"
+  # 目录模板
+  /catalog-templates:
+    get:
+      operationId: listCatalogTemplates
+      tags: [templates]
+      summary: 获取目录模板列表
+      responses:
+        "200":
+          description: 目录模板列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createCatalogTemplate
+      tags: [templates]
+      summary: 创建目录模板
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /catalog-templates/{id}:
+    get:
+      operationId: getCatalogTemplate
+      tags: [templates]
+      summary: 获取目录模板详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 目录模板详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    put:
+      operationId: updateCatalogTemplate
+      tags: [templates]
+      summary: 更新目录模板
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteCatalogTemplate
+      tags: [templates]
+      summary: 删除目录模板
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /catalog-templates/{id}/nodes:
+    get:
+      operationId: listCatalogTemplateNodes
+      tags: [templates]
+      summary: 获取目录模板节点列表
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 节点列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createCatalogTemplateNode
+      tags: [templates]
+      summary: 创建目录模板节点
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /catalog-templates/{id}/nodes/{nodeId}:
+    put:
+      operationId: updateCatalogTemplateNode
+      tags: [templates]
+      summary: 更新目录模板节点
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: nodeId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteCatalogTemplateNode
+      tags: [templates]
+      summary: 删除目录模板节点
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: nodeId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  # 城建归档
+  /city-archive/nodes:
+    get:
+      operationId: listCityArchiveNodes
+      tags: [archives]
+      summary: 获取城建归档节点列表
+      responses:
+        "200":
+          description: 节点列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createCityArchiveNode
+      tags: [archives]
+      summary: 创建城建归档节点
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /city-archive/nodes/{id}:
+    get:
+      operationId: getCityArchiveNode
+      tags: [archives]
+      summary: 获取城建归档节点详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 节点详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    put:
+      operationId: updateCityArchiveNode
+      tags: [archives]
+      summary: 更新城建归档节点
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteCityArchiveNode
+      tags: [archives]
+      summary: 删除城建归档节点
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /city-archive/mapping:
+    get:
+      operationId: listCityArchiveMapping
+      tags: [archives]
+      summary: 获取城建归档映射列表
+      responses:
+        "200":
+          description: 映射列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createCityArchiveMapping
+      tags: [archives]
+      summary: 创建城建归档映射
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /city-archive/mapping/{cityNodeId}/{projectNodeId}:
+    delete:
+      operationId: deleteCityArchiveMapping
+      tags: [archives]
+      summary: 删除城建归档映射
+      parameters:
+        - name: cityNodeId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: projectNodeId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  # 企业配置
+  /enterprise-configs/templates:
+    get:
+      operationId: listEnterpriseConfigTemplates
+      tags: [templates]
+      summary: 获取企业模板配置列表
+      responses:
+        "200":
+          description: 企业模板配置列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createEnterpriseConfigTemplate
+      tags: [templates]
+      summary: 创建企业模板配置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /enterprise-configs/templates/{id}:
+    get:
+      operationId: getEnterpriseConfigTemplate
+      tags: [templates]
+      summary: 获取企业模板配置详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 企业模板配置详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    put:
+      operationId: updateEnterpriseConfigTemplate
+      tags: [templates]
+      summary: 更新企业模板配置
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteEnterpriseConfigTemplate
+      tags: [templates]
+      summary: 删除企业模板配置
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /enterprise-configs/paradigms:
+    get:
+      operationId: listEnterpriseConfigParadigms
+      tags: [templates]
+      summary: 获取企业范本配置列表
+      responses:
+        "200":
+          description: 企业范本配置列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createEnterpriseConfigParadigm
+      tags: [templates]
+      summary: 创建企业范本配置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /enterprise-configs/paradigms/{id}:
+    get:
+      operationId: getEnterpriseConfigParadigm
+      tags: [templates]
+      summary: 获取企业范本配置详情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 企业范本配置详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    put:
+      operationId: updateEnterpriseConfigParadigm
+      tags: [templates]
+      summary: 更新企业范本配置
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteEnterpriseConfigParadigm
+      tags: [templates]
+      summary: 删除企业范本配置
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  # 模板附加
+  /templates/{templateId}/extras/examples:
+    get:
+      operationId: listTemplateExamples
+      tags: [templates]
+      summary: 获取模板范例列表
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 模板范例列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    post:
+      operationId: createTemplateExample
+      tags: [templates]
+      summary: 创建模板范例
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 创建成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /templates/{templateId}/extras/examples/{exampleId}:
+    get:
+      operationId: getTemplateExample
+      tags: [templates]
+      summary: 获取模板范例详情
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: exampleId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 模板范例详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+    put:
+      operationId: updateTemplateExample
+      tags: [templates]
+      summary: 更新模板范例
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: exampleId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+    delete:
+      operationId: deleteTemplateExample
+      tags: [templates]
+      summary: 删除模板范例
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: exampleId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "204":
+          description: 删除成功
+
+  /templates/{templateId}/extras/instructions:
+    get:
+      operationId: getTemplateInstructions
+      tags: [templates]
+      summary: 获取模板填写说明
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 模板填写说明
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+    put:
+      operationId: updateTemplateInstructions
+      tags: [templates]
+      summary: 更新模板填写说明
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /templates/{templateId}/extras/autofill:
+    get:
+      operationId: getTemplateAutofillConfig
+      tags: [templates]
+      summary: 获取模板自动填充配置
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 自动填充配置
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+    put:
+      operationId: updateTemplateAutofillConfig
+      tags: [templates]
+      summary: 更新模板自动填充配置
+      parameters:
+        - name: templateId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+  /ai/chat:
+    post:
+      operationId: aiChat
+      tags: [ai]
+      summary: AI对话代理
+      description: 代理大模型API请求，支持流式响应
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiChatRequest"
+      responses:
+        "200":
+          description: SSE 流式响应
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "400":
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ai/test:
+    post:
+      operationId: aiTestConnection
+      tags: [ai]
+      summary: 测试AI连接
+      description: 测试大模型API配置是否正确
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiTestRequest"
+      responses:
+        "200":
+          description: 连接测试结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiTestResponse"
+        "400":
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ai/config:
+    get:
+      operationId: getAiConfig
+      tags: [ai]
+      summary: 获取AI配置
+      description: 获取当前用户的AI服务配置
+      responses:
+        "200":
+          description: AI配置
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiConfigResponse"
+        "401":
+          description: 未授权
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: saveAiConfig
+      tags: [ai]
+      summary: 保存AI配置
+      description: 保存用户的AI服务配置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiConfigSaveRequest"
+      responses:
+        "200":
+          description: 保存成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteAiConfig
+      tags: [ai]
+      summary: 删除AI配置
+      description: 删除用户的AI服务配置
+      responses:
+        "200":
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /ai/config/test:
+    post:
+      operationId: testAiConfig
+      tags: [ai]
+      summary: 测试AI配置
+      description: 测试AI配置是否可用并记录测试结果
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiTestRequest"
+      responses:
+        "200":
+          description: 测试结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiTestResponse"
+        "400":
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ai/classify:
+    post:
+      operationId: aiClassifyFile
+      tags: [ai]
+      summary: AI文件分类
+      description: 使用AI识别文件类型、推荐归档目录节点、提取元数据
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiClassifyRequest"
+      responses:
+        "200":
+          description: 分类结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiClassifyResponse"
+        "400":
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ai/classify/batch:
+    post:
+      operationId: aiClassifyFilesBatch
+      tags: [ai]
+      summary: AI批量文件分类
+      description: 批量使用AI识别文件类型（单次最多10个文件）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiClassifyBatchRequest"
+      responses:
+        "200":
+          description: 批量分类结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiClassifyBatchResponse"
+        "400":
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ai/classify/file-types:
+    get:
+      operationId: aiGetFileTypes
+      tags: [ai]
+      summary: 获取支持的文件类型列表
+      description: 返回AI分类支持的文件类型及其对应的归档目录节点
+      responses:
+        "200":
+          description: 文件类型列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiFileTypesResponse"
+
+  /form-fill/project/{projectId}/defaults:
+    get:
+      operationId: getFormFillDefaults
+      tags: [form-fill]
+      summary: 获取项目默认填充值
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 项目默认填充值
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FormFillDefaultsResponse"
+
+  /form-fill/suggest:
+    post:
+      operationId: getFormFillSuggestions
+      tags: [form-fill]
+      summary: 获取完整填充建议
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FormFillSuggestRequest"
+      responses:
+        "200":
+          description: 填充建议
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FormFillSuggestionsResponse"
+
+  /form-fill/history:
+    post:
+      operationId: getFormFillHistory
+      tags: [form-fill]
+      summary: 获取基于历史数据的填充建议
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FormFillHistoryRequest"
+      responses:
+        "200":
+          description: 历史填充建议
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FormFillDefaultsResponse"
+
+  /form-fill/infer:
+    post:
+      operationId: inferFormFillFields
+      tags: [form-fill]
+      summary: AI推断缺失字段
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FormFillInferRequest"
+      responses:
+        "200":
+          description: AI推断结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FormFillInferResponse"
+        "400":
+          description: 未配置AI设置
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /form-fill/batch:
+    post:
+      operationId: batchFormFill
+      tags: [form-fill]
+      summary: 批量填充
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FormFillBatchRequest"
+      responses:
+        "200":
+          description: 批量填充结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FormFillBatchResponse"
+
+  # ── Seal Flow ──────────────────────────────────────────
+  /seal-flow:
+    get:
+      operationId: listSealFlowTasks
+      tags: [seal-flow]
+      summary: 获取当前用户的签章流转任务
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 签章流转任务列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /seal-flow/{nodeId}/sign:
+    post:
+      operationId: signSealFlowNode
+      tags: [seal-flow]
+      summary: 执行签章
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 签章完成
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  # ── API Keys ──────────────────────────────────────────
+  /api-keys:
+    get:
+      operationId: listApiKeys
+      tags: [api-keys]
+      summary: 列出当前用户的 API Key
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: API Key 列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    keyPrefix: { type: string }
+                    name: { type: string }
+                    status: { type: string }
+                    lastUsedAt: { type: string, format: date-time, nullable: true }
+                    expiresAt: { type: string, format: date-time, nullable: true }
+                    createdAt: { type: string, format: date-time }
+    post:
+      operationId: createApiKey
+      tags: [api-keys]
+      summary: 创建 API Key
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                expiresAt: { type: string, format: date-time }
+      responses:
+        "201":
+          description: 创建成功（raw key 仅返回一次）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key: { type: string, description: "完整 API Key（qd_live_ 前缀）" }
+                  keyPrefix: { type: string }
+                  name: { type: string }
+
+  /api-keys/{keyId}:
+    delete:
+      operationId: revokeApiKey
+      tags: [api-keys]
+      summary: 撤销 API Key
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 撤销结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+
+  # ── WeChat ──────────────────────────────────────────
+  /wechat/login:
+    post:
+      operationId: wechatLogin
+      tags: [wechat]
+      summary: 微信小程序登录（code 换 JWT）
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, description: "wx.login() 获取的 code" }
+      responses:
+        "200":
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                  user:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      username: { type: string }
+                      role: { type: string }
+        "401":
+          description: 微信登录失败或未绑定
+
+  /wechat/bind:
+    post:
+      operationId: wechatBind
+      tags: [wechat]
+      summary: 绑定微信账号到当前用户
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [openid]
+              properties:
+                openid: { type: string }
+                unionid: { type: string }
+                nickname: { type: string }
+      responses:
+        "200":
+          description: 绑定结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+    delete:
+      operationId: wechatUnbind
+      tags: [wechat]
+      summary: 解绑微信账号
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [openid]
+              properties:
+                openid: { type: string }
+      responses:
+        "200":
+          description: 解绑结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+
+  /wechat/bindings:
+    get:
+      operationId: listWechatBindings
+      tags: [wechat]
+      summary: 查看当前用户的微信绑定
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: 绑定列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    openid: { type: string }
+                    nickname: { type: string, nullable: true }
+                    createdAt: { type: string, format: date-time }
+
+  /user/preferences:
+    get:
+      operationId: getUserPreference
+      tags: [user-preferences]
+      summary: 获取当前用户偏好
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 偏好值
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key: { type: string }
+                  value: { type: object }
+    put:
+      operationId: upsertUserPreference
+      tags: [user-preferences]
+      summary: 设置当前用户偏好
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                key: { type: string }
+                value: { type: object }
+              required:
+                - key
+                - value
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key: { type: string }
+                  value: { type: object }
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Access Token（通过 /auth/login 获取）
+    ApiKeyAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+      description: API Key（qd_live_ 前缀，通过 /api-keys 创建）
+
+  schemas:
+    InvitePreviewResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        projectName:
+          type: string
+        role:
+          type: string
+        inviteRemark:
+          type: string
+    AcceptInviteResponse:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        role:
+          type: string
+        alreadyMember:
+          type: boolean
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    DictionaryItem:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+      required:
+        - code
+        - name
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+        - message
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        code:
+          type: string
+        type:
+          type: string
+          description: 项目类型（住宅、商业、市政等）
+        status:
+          type: string
+          enum: [active, project_archive]
+        buildingUnit:
+          type: string
+          description: 建设单位
+        constructionUnit:
+          type: string
+          description: 施工单位
+        supervisionUnit:
+          type: string
+          description: 监理单位
+        designUnit:
+          type: string
+          description: 设计单位
+        location:
+          type: string
+          description: 建设地址
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        totalArea:
+          type: number
+          description: 总建筑面积（㎡）
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        unitCount:
+          type: integer
+        documentCount:
+          type: integer
+        pendingReviewCount:
+          type: integer
+      required:
+        - id
+        - name
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        type:
+          type: string
+        buildingUnit:
+          type: string
+        constructionUnit:
+          type: string
+        supervisionUnit:
+          type: string
+        designUnit:
+          type: string
+        location:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        totalArea:
+          type: number
+        description:
+          type: string
+      required:
+        - name
+        - type
+        - buildingUnit
+
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum: [active, project_archive]
+        buildingUnit:
+          type: string
+        constructionUnit:
+          type: string
+        supervisionUnit:
+          type: string
+        designUnit:
+          type: string
+        location:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        totalArea:
+          type: number
+        description:
+          type: string
+
+    ProjectListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+      required:
+        - data
+        - total
+        - page
+        - limit
+
+    ProjectStats:
+      type: object
+      properties:
+        totalDocuments:
+          type: integer
+        approvedDocuments:
+          type: integer
+        pendingReviews:
+          type: integer
+        totalUnits:
+          type: integer
+      required:
+        - totalDocuments
+        - approvedDocuments
+        - pendingReviews
+        - totalUnits
+
+    JoinProjectRequest:
+      type: object
+      properties:
+        accessCode:
+          type: string
+          description: 项目接入码
+        accessPassword:
+          type: string
+          description: 接入密码
+        name:
+          type: string
+          description: 成员姓名
+        role:
+          type: string
+          description: 成员角色
+        unit:
+          type: string
+          description: 所属单位（可选）
+      required:
+        - accessCode
+        - accessPassword
+        - name
+        - role
+
+    JoinProjectResponse:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        member:
+          type: object
+          properties:
+            id:
+              type: integer
+            projectId:
+              type: integer
+            name:
+              type: string
+            role:
+              type: string
+            unit:
+              type: string
+            joinMethod:
+              type: string
+              enum: [access_code, invite_link]
+            isOwner:
+              type: boolean
+            joinedAt:
+              type: string
+              format: date-time
+      required:
+        - projectId
+        - projectName
+        - member
+
+    AccessCodeResponse:
+      type: object
+      properties:
+        accessCode:
+          type: string
+          description: 工程接入码
+        accessPassword:
+          type: string
+          description: 访问密码
+      required:
+        - accessCode
+        - accessPassword
+
+    Unit:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        name:
+          type: string
+        engType:
+          type: string
+          description: 工程类型（D.0.2 code）
+        structureType:
+          type: string
+          description: 结构类型
+        floors:
+          type: integer
+          description: 层数
+        buildingArea:
+          type: number
+          description: 建筑面积（㎡）
+        documentCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - projectId
+        - name
+        - createdAt
+
+    UploadFile:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        unitId:
+          type: integer
+        fileName:
+          type: string
+        title:
+          type: string
+        fileType:
+          type: string
+          description: 文件类型业务标签 PDF/OFD/其他
+        mimeType:
+          type: string
+        fileSize:
+          type: integer
+        fileUrl:
+          type: string
+        storagePath:
+          type: string
+        nodeId:
+          type: string
+        nodeLabel:
+          type: string
+        carrier:
+          type: string
+        compiler:
+          type: string
+        compileDate:
+          type: string
+          format: date
+        responsible:
+          type: string
+        copies:
+          type: integer
+        pages:
+          type: integer
+        remarks:
+          type: string
+        status:
+          type: string
+          enum: [pending, signing, signed, collected, returned]
+        uploadedBy:
+          type: integer
+        uploadedAt:
+          type: string
+          format: date-time
+        cataloguedBy:
+          type: integer
+        cataloguedAt:
+          type: string
+          format: date-time
+        returnReason:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - projectId
+        - fileName
+        - status
+        - uploadedAt
+
+    UploadFileVersion:
+      type: object
+      properties:
+        id:
+          type: integer
+        uploadFileId:
+          type: integer
+        version:
+          type: integer
+        fileUrl:
+          type: string
+        storagePath:
+          type: string
+        fileSize:
+          type: integer
+        mimeType:
+          type: string
+        titleSnapshot:
+          type: string
+        fileNameSnapshot:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: integer
+
+    CreateUnitRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        engType:
+          type: string
+          description: 工程类型（D.0.2 code）
+        structureType:
+          type: string
+        floors:
+          type: integer
+        buildingArea:
+          type: number
+      required:
+        - name
+
+    Document:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: integer
+        unitId:
+          type: integer
+        title:
+          type: string
+        code:
+          type: string
+          description: 资料编号
+        category:
+          type: string
+          description: 资料分类
+        subCategory:
+          type: string
+        type:
+          type: string
+          enum: [online, uploaded]
+          description: online=在线编制, uploaded=外部上传
+        status:
+          type: string
+          enum: [draft, under_review, approved, rejected]
+        content:
+          type: string
+          description: 在线编制内容（JSON格式）
+        fileUrl:
+          type: string
+          description: 上传文件URL
+        fileFormat:
+          type: string
+        version:
+          type: integer
+        createdBy:
+          type: integer
+        assignedReviewer:
+          type: integer
+        reviewComment:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - projectId
+        - title
+        - category
+        - type
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateDocumentRequest:
+      type: object
+      properties:
+        unitId:
+          type: integer
+        title:
+          type: string
+        code:
+          type: string
+        category:
+          type: string
+        subCategory:
+          type: string
+        type:
+          type: string
+          enum: [online, uploaded]
+        templateId:
+          type: integer
+        content:
+          type: string
+        fileUrl:
+          type: string
+        fileFormat:
+          type: string
+      required:
+        - title
+        - category
+        - type
+
+    UpdateDocumentRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        fileUrl:
+          type: string
+        status:
+          type: string
+          enum: [draft, under_review, approved, rejected]
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: integer
+        documentId:
+          type: integer
+        documentTitle:
+          type: string
+        projectId:
+          type: integer
+        projectName:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        assignedTo:
+          type: integer
+        assignedToName:
+          type: string
+        submittedBy:
+          type: integer
+        submittedByName:
+          type: string
+        comment:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - documentId
+        - status
+        - createdAt
+        - updatedAt
+
+    ReviewActionRequest:
+      type: object
+      properties:
+        comment:
+          type: string
+      required:
+        - comment
+
+    ReviewHintsRequest:
+      type: object
+      properties:
+        documentId:
+          type: integer
+        projectId:
+          type: integer
+        content:
+          type: string
+      required:
+        - documentId
+        - projectId
+
+    ReviewHint:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [risk, compliance, suggestion]
+        severity:
+          type: string
+          enum: [high, medium, low]
+        title:
+          type: string
+        description:
+          type: string
+        field:
+          type: string
+        suggestion:
+          type: string
+      required:
+        - id
+        - type
+        - severity
+        - title
+        - description
+
+    ReviewHintsResult:
+      type: object
+      properties:
+        documentId:
+          type: integer
+        hints:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReviewHint"
+        summary:
+          type: object
+          properties:
+            riskCount:
+              type: integer
+            complianceCount:
+              type: integer
+            suggestionCount:
+              type: integer
+          required:
+            - riskCount
+            - complianceCount
+            - suggestionCount
+        generatedAt:
+          type: string
+          format: date-time
+      required:
+        - documentId
+        - hints
+        - summary
+        - generatedAt
+
+    ReviewHintsResponse:
+      type: object
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/ReviewHintsResult"
+        success:
+          type: boolean
+      required:
+        - code
+        - message
+        - data
+        - success
+
+    ArchiveResult:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        status:
+          type: string
+        archivedAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+      required:
+        - projectId
+        - status
+        - message
+
+    PackageResult:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        packageUrl:
+          type: string
+        packageSize:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+      required:
+        - projectId
+        - message
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [super_admin, tenant_admin, system_admin, tenant_user]
+        department:
+          type: string
+        departmentId:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [active, disabled]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - username
+        - role
+        - status
+        - createdAt
+
+    CreateUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [super_admin, tenant_admin, system_admin, tenant_user]
+        department:
+          type: string
+        departmentId:
+          type: integer
+        password:
+          type: string
+      required:
+        - name
+        - username
+        - role
+        - password
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          enum: [super_admin, tenant_admin, system_admin, tenant_user]
+        department:
+          type: string
+        departmentId:
+          type: integer
+        status:
+          type: string
+          enum: [active, disabled]
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        code:
+          type: string
+          description: 表格编号
+        category:
+          type: string
+        subCategory:
+          type: string
+        description:
+          type: string
+        fields:
+          type: string
+          description: 表单字段定义JSON
+        isStandard:
+          type: boolean
+          description: 是否为青岛市标准模板
+        version:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - category
+        - isStandard
+        - createdAt
+
+    DashboardStats:
+      type: object
+      properties:
+        totalProjects:
+          type: integer
+        activeProjects:
+          type: integer
+        archivedProjects:
+          type: integer
+        totalDocuments:
+          type: integer
+        pendingReviews:
+          type: integer
+        monthlyNewProjects:
+          type: integer
+        recentProjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/Project"
+      required:
+        - totalProjects
+        - activeProjects
+        - archivedProjects
+        - totalDocuments
+        - pendingReviews
+        - monthlyNewProjects
+        - recentProjects
+
+    CompilationInstance:
+      type: object
+      properties:
+        id: { type: integer }
+        projectId: { type: integer }
+        unitId: { type: integer, nullable: true }
+        itemId: { type: string }
+        name: { type: string }
+        status:
+          type: string
+          enum: [drafting, completed, signing, signed, collected]
+        version: { type: string }
+        createdBy: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+        lastModifiedBy: { type: integer, nullable: true }
+        lastModifiedAt: { type: string, format: date-time }
+      required: [id, projectId, itemId, name, status, version, createdAt, lastModifiedAt]
+
+    CreateCompilationInstanceRequest:
+      type: object
+      properties:
+        unitId: { type: integer }
+        itemId: { type: string }
+        name: { type: string }
+      required: [itemId, name]
+
+    UpdateCompilationInstanceRequest:
+      type: object
+      properties:
+        name: { type: string }
+        status:
+          type: string
+          enum: [drafting, completed, signing, signed, collected]
+        version: { type: string }
+
+    CompilationFormDataUpsertRequest:
+      type: object
+      properties:
+        data:
+          type: object
+          additionalProperties:
+            type: string
+            nullable: true
+      required: [data]
+
+    AuthTokenResponse:
+      type: object
+      properties:
+        code: { type: integer }
+        message: { type: string }
+        data:
+          type: object
+          properties:
+            accessToken: { type: string }
+            refreshToken: { type: string }
+            user:
+              type: object
+              properties:
+                id: { type: integer }
+                username: { type: string }
+                name: { type: string }
+                role: { type: string }
+          required: [accessToken, refreshToken]
+        success: { type: boolean }
+      required: [code, message, data, success]
+
+    AiChatRequest:
+      type: object
+      required: [baseUrl, apiKey, model, messages]
+      properties:
+        baseUrl:
+          type: string
+          format: uri
+          description: 大模型API地址
+        apiKey:
+          type: string
+          minLength: 1
+          description: API密钥
+        model:
+          type: string
+          default: "glm-4-flash"
+          description: 模型名称
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiChatMessage"
+          description: 对话消息列表
+
+    AiChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+
+    AiTestRequest:
+      type: object
+      required: [baseUrl, apiKey, model]
+      properties:
+        baseUrl:
+          type: string
+          format: uri
+          description: 大模型API地址
+        apiKey:
+          type: string
+          minLength: 1
+          description: API密钥
+        model:
+          type: string
+          default: "glm-4-flash"
+          description: 模型名称
+
+    AiTestResponse:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          description: 是否成功
+        message:
+          type: string
+          description: 结果消息
+        model:
+          type: string
+          description: 返回的模型名称
+        responseTime:
+          type: integer
+          description: 响应时间（毫秒）
+
+    SuccessResponse:
+      type: object
+      required: [code, message, success]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        success:
+          type: boolean
+          default: true
+        data:
+          type: object
+          nullable: true
+
+    # AI 配置相关 Schema
+    AiConfigResponse:
+      type: object
+      required: [code, message, success]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            hasConfig:
+              type: boolean
+              description: 是否已配置
+            config:
+              $ref: "#/components/schemas/AiUserConfig"
+
+    AiUserConfig:
+      type: object
+      properties:
+        baseUrl:
+          type: string
+          format: uri
+          description: API地址
+        apiKey:
+          type: string
+          description: API密钥
+        model:
+          type: string
+          description: 模型名称
+        isEnabled:
+          type: boolean
+          description: 是否启用
+        lastTestedAt:
+          type: string
+          format: date-time
+          description: 上次测试时间
+        lastTestResult:
+          type: string
+          description: 上次测试结果
+
+    AiConfigSaveRequest:
+      type: object
+      required: [baseUrl, apiKey, model]
+      properties:
+        baseUrl:
+          type: string
+          format: uri
+          description: API地址
+        apiKey:
+          type: string
+          minLength: 1
+          description: API密钥
+        model:
+          type: string
+          minLength: 1
+          description: 模型名称
+        isEnabled:
+          type: boolean
+          description: 是否启用
+
+    AiClassifyRequest:
+      type: object
+      required: [fileName, fileContent]
+      properties:
+        projectId:
+          type: integer
+          description: 项目ID（可选）
+        fileId:
+          type: integer
+          description: 文件ID（可选）
+        fileName:
+          type: string
+          minLength: 1
+          description: 文件名
+        fileContent:
+          type: string
+          description: 文件内容（Base64编码）
+        mimeType:
+          type: string
+          description: MIME类型
+        aiConfig:
+          $ref: "#/components/schemas/AiConfig"
+
+    AiConfig:
+      type: object
+      required: [apiKey]
+      properties:
+        baseUrl:
+          type: string
+          format: uri
+          default: "https://open.bigmodel.cn/api/coding/paas/v4/"
+          description: 大模型API地址
+        apiKey:
+          type: string
+          minLength: 1
+          description: API密钥
+        model:
+          type: string
+          default: "GLM-5.1"
+          description: 模型名称
+
+    AiClassifyResponse:
+      type: object
+      required: [code, message, success]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/AiClassificationResult"
+
+    AiClassificationResult:
+      type: object
+      required: [success, confidence]
+      properties:
+        success:
+          type: boolean
+          description: 分类是否成功
+        fileType:
+          type: string
+          description: 文件类型代码
+        fileTypeLabel:
+          type: string
+          description: 文件类型完整名称
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          description: 分类置信度（0-1）
+        catalogNodeId:
+          type: string
+          description: 推荐的归档目录节点ID
+        catalogNodeLabel:
+          type: string
+          description: 推荐的归档目录节点名称
+        metadata:
+          type: object
+          properties:
+            title:
+              type: string
+              description: 提取的题名
+            compiler:
+              type: string
+              description: 编制单位
+            compileDate:
+              type: string
+              description: 编制日期
+            responsible:
+              type: string
+              description: 责任人
+        error:
+          type: string
+          description: 错误信息（分类失败时）
+
+    AiClassifyBatchRequest:
+      type: object
+      required: [files, aiConfig]
+      properties:
+        files:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            type: object
+            required: [fileName, fileContent]
+            properties:
+              fileName:
+                type: string
+                minLength: 1
+              fileContent:
+                type: string
+                description: 文件内容（Base64编码）
+              mimeType:
+                type: string
+        aiConfig:
+          $ref: "#/components/schemas/AiConfig"
+
+    AiClassifyBatchResponse:
+      type: object
+      required: [code, message, success]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: "#/components/schemas/AiClassificationResult"
+            total:
+              type: integer
+
+    FormFillDefaultsResponse:
+      type: object
+      required: [code, message, success]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            defaults:
+              type: object
+              additionalProperties:
+                type: string
+                nullable: true
+            total:
+              type: integer
+
+    FormFillSuggestRequest:
+      type: object
+      required: [projectId]
+      properties:
+        projectId:
+          type: integer
+        fileContent:
+          type: string
+        category:
+          type: string
+
+    FormFillSuggestionsResponse:
+      type: object
+      required: [code, message, success]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            suggestions:
+              type: object
+              additionalProperties: true
+            stats:
+              type: object
+              properties:
+                project:
+                  type: integer
+                history:
+                  type: integer
+                ai:
+                  type: integer
+            total:
+              type: integer
+
+    FormFillHistoryRequest:
+      type: object
+      required: [projectId]
+      properties:
+        projectId:
+          type: integer
+        category:
+          type: string
+        minConfidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.3
+
+    FormFillInferRequest:
+      type: object
+      required: [fileContent]
+      properties:
+        fileContent:
+          type: string
+          minLength: 1
+
+    FormFillInferResponse:
+      type: object
+      required: [code, message, success]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            inference:
+              type: object
+              additionalProperties: true
+            total:
+              type: integer
+
+    FormFillBatchRequest:
+      type: object
+      required: [projectId, files]
+      properties:
+        projectId:
+          type: integer
+        files:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [fileId, fileName]
+            properties:
+              fileId:
+                type: integer
+              fileName:
+                type: string
+                minLength: 1
+              content:
+                type: string
+
+    FormFillBatchResponse:
+      type: object
+      required: [code, message, success]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            results:
+              type: array
+              items:
+                type: object
+                additionalProperties: true
+            total:
+              type: integer
+
+    AiFileTypesResponse:
+      type: object
+      required: [code, message, success]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            fileTypes:
+              type: array
+              items:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  label:
+                    type: string
+                  nodeId:
+                    type: string
+            total:
+              type: integer

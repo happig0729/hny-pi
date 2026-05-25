@@ -19,7 +19,7 @@
 - Always ask before removing functionality or code that appears to be intentional
 - Do not preserve backward compatibility unless the user explicitly asks for it
 - Never hardcode key checks with, eg. `matchesKey(keyData, "ctrl+x")`. All keybindings must be configurable. Add default to matching object (`DEFAULT_EDITOR_KEYBINDINGS` or `DEFAULT_APP_KEYBINDINGS`)
-- NEVER modify `packages/ai/src/models.generated.ts` directly. Update `packages/ai/scripts/generate-models.ts` instead.
+- NEVER modify `packages/ai/src/models.generated.ts` or `packages/ai/src/image-models.generated.ts` directly. Update `packages/ai/scripts/generate-models.ts` or `packages/ai/scripts/generate-image-models.ts` instead.
 
 ## Commands
 
@@ -79,7 +79,7 @@ To test pi's TUI in a controlled terminal environment:
 tmux new-session -d -s pi-test -x 80 -y 24
 
 # Start pi from source
-tmux send-keys -t pi-test "cd /Users/badlogic/workspaces/pi-mono && ./pi-test.sh" Enter
+tmux send-keys -t pi-test "cd /Users/zhuyuanlin/code/hny-pi && ./pi-test.sh" Enter
 
 # Wait for startup, then capture output
 sleep 3 && tmux capture-pane -t pi-test -p
@@ -128,32 +128,29 @@ Adding a new provider requires changes across multiple files:
 
 ### 1. Core Types (`packages/ai/src/types.ts`)
 
-- Add API identifier to `Api` type union (e.g., `"bedrock-converse-stream"`)
-- Create options interface extending `StreamOptions`
-- Add mapping to `ApiOptionsMap`
-- Add provider name to `KnownProvider` type union
+- Add API identifier to `KnownApi` type union (e.g., `"bedrock-converse-stream"`) or `KnownImagesApi` type union (e.g., `"openrouter-images"`) if introducing a new API protocol
+- Create options interface extending `StreamOptions` (for text) or `ImagesOptions` (for images)
+- Add provider name to `KnownProvider` or `KnownImagesProvider` type union
+- Update the `compat` property in `Model` type if compatibility settings are needed
 
-### 2. Provider Implementation (`packages/ai/src/providers/`)
+### 2. Provider Implementation (`packages/ai/src/providers/` or `packages/ai/src/providers/images/`)
 
 Create provider file exporting:
 
-- `stream<Provider>()` function returning `AssistantMessageEventStream`
-- `streamSimple<Provider>()` for `SimpleStreamOptions` mapping
-- Provider-specific options interface
-- Message/tool conversion functions
-- Response parsing emitting standardized events (`text`, `tool_call`, `thinking`, `usage`, `stop`)
+- For text: `stream<Provider>()` returning `AssistantMessageEventStream`, `streamSimple<Provider>()` for `SimpleStreamOptions` mapping, provider-specific options interface, message/tool conversion, and event emitting (`text`, `tool_call`, `thinking`, `usage`, `stop`)
+- For images: `generateImages<Provider>()` returning `Promise<AssistantImages>`, provider-specific options interface, and prompt/parameter mapping
 
 ### 3. Provider Exports and Lazy Registration
 
-- Add a package subpath export in `packages/ai/package.json` pointing at `./dist/providers/<provider>.js`
+- Add a package subpath export in `packages/ai/package.json` pointing at `./dist/providers/<provider>.js` or `./dist/providers/images/<provider>.js`
 - Add `export type` re-exports in `packages/ai/src/index.ts` for provider option types that should remain available from the root entry
-- Register the provider in `packages/ai/src/providers/register-builtins.ts` via lazy loader wrappers, do not statically import provider implementation modules there
-- Add credential detection in `packages/ai/src/env-api-keys.ts`
+- Register the provider via lazy loader wrappers in `packages/ai/src/providers/register-builtins.ts` (for text) or `packages/ai/src/providers/images/register-builtins.ts` (for images). Do not statically import provider implementation modules in the registration files.
+- Add API key environment variable detection in `packages/ai/src/env-api-keys.ts`
 
-### 4. Model Generation (`packages/ai/scripts/generate-models.ts`)
+### 4. Model Generation (`packages/ai/scripts/`)
 
-- Add logic to fetch/parse models from provider source
-- Map to standardized `Model` interface
+- Add logic to fetch/parse models from provider source in `generate-models.ts` or `generate-image-models.ts`
+- Map to standardized `Model` or `ImagesModel` interface
 
 ### 5. Tests (`packages/ai/test/`)
 
