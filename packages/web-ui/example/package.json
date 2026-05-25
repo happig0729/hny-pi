@@ -19,7 +19,8 @@
     "@a2ui/markdown-it": "file:../../../../github/A2UI/renderers/markdown/markdown-it",
     "@lit/context": "^1.1.4",
     "lit": "^3.3.1",
-    "lucide": "^0.544.0"
+    "lucide": "^0.544.0",
+    "typebox": "^1.1.38"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.17",

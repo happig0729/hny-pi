@@ -7,8 +7,8 @@ import {
 	AppStorage,
 	ChatPanel,
 	CustomProvidersStore,
-	createApiQueryTool,
 	createJavaScriptReplTool,
+	createStreamFn,
 	createWebSearchTool,
 	IndexedDBStorageBackend,
 	// PersistentStorageDialog, // TODO: Fix - currently broken
@@ -33,6 +33,12 @@ import { ContextProvider } from "@lit/context";
 import { icon } from "@mariozechner/mini-lit";
 import { Button } from "@mariozechner/mini-lit/dist/Button.js";
 import { Input } from "@mariozechner/mini-lit/dist/Input.js";
+import { buildArchiveOperationFingerprint, createArchiveApiTool, readArchiveOperationRequest } from "./archive-agent-tool.js";
+import {
+	ARCHIVE_MANAGER_SYSTEM_PROMPT,
+	ARCHIVE_QUICK_PROMPTS,
+	createArchiveActionCancelledMessages,
+} from "./archive-a2ui.js";
 import { createSystemNotification, customConvertToLlm, registerCustomMessageRenderers } from "./custom-messages.js";
 import "@a2ui/lit/v0_9";
 
@@ -76,6 +82,7 @@ setAppStorage(storage);
 
 // API auth token (auto-refreshed on login)
 let apiAuthToken: string | undefined;
+const approvedArchiveOperations = new Map<string, string>();
 
 const refreshApiToken = async () => {
 	if (!config.api.auth.enabled || !config.api.auth.username) return;
@@ -97,6 +104,21 @@ const refreshApiToken = async () => {
 	}
 };
 
+const archiveApiTool = createArchiveApiTool({
+	baseUrl: config.api.baseUrl,
+	getAuthToken: () => apiAuthToken,
+	consumeConfirmedOperation: (confirmationKey, request) => {
+		const approvedFingerprint = approvedArchiveOperations.get(confirmationKey);
+		if (!approvedFingerprint) return false;
+
+		const requestFingerprint = buildArchiveOperationFingerprint(request);
+		if (approvedFingerprint !== requestFingerprint) return false;
+
+		approvedArchiveOperations.delete(confirmationKey);
+		return true;
+	},
+});
+
 let currentSessionId: string | undefined;
 let currentTitle = "";
 let isEditingTitle = false;
@@ -107,466 +129,6 @@ let agentUnsubscribe: (() => void) | undefined;
 // ============================================================================
 // A2UI State & Integration Setup
 // ============================================================================
-
-const A2UI_SYSTEM_PROMPT = `You are a helpful restaurant finding assistant. Your final output MUST be a valid A2UI UI JSON response using protocol version v0.9.
-
-Return exactly one A2UI JSON array wrapped in <a2ui-json> and </a2ui-json>. Do not use markdown code fences. Do not put explanatory prose inside the tags.
-
-Use the A2UI basic catalog exactly as shown in the samples:
-- catalogId MUST be "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json".
-- Every message MUST include "version": "v0.9".
-- Every surface MUST have a root component with id "root".
-- updateComponents.components MUST be a flat array. Do not nest component objects inside other component objects.
-- Refer to children by component id strings. For a Card, use "child": "some-id", not "children".
-- For a dynamic list, use List.children as { "componentId": "item-card-template", "path": "/items" }.
-- Inside a List item template, data bindings MUST be relative paths such as { "path": "name" }, { "path": "rating" }, { "path": "detail" }, { "path": "imageUrl" }, and { "path": "address" }.
-- Outside a List template, data bindings MUST be absolute paths such as { "path": "/title" }.
-- Text components MUST use "text". Image components MUST use "url". Button labels MUST be Text child components. Button actions MUST use { "event": { "name": "...", "context": { ... } } }.
-- updateDataModel MUST always specify "path". For restaurant lists, set "/title" to a string and "/items" to an array of restaurant objects.
-
-Do not use these non-A2UI aliases: type, properties, components as children, value for Text, src, source, imageUrl as an Image property, label on Button, data, dataPath, textPath, sourcePath, itemTemplate, contextBindings, or strings like "{name}".
-
-For restaurant lists with 5 or fewer items, use this template shape:
-<a2ui-json>
-[
-  {
-    "version": "v0.9",
-    "createSurface": {
-      "surfaceId": "default",
-      "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
-      "theme": { "primaryColor": "#FF0000", "font": "Roboto" }
-    }
-  },
-  {
-    "version": "v0.9",
-    "updateComponents": {
-      "surfaceId": "default",
-      "components": [
-        { "id": "root", "component": "Column", "children": ["title-heading", "item-list"] },
-        { "id": "title-heading", "component": "Text", "variant": "h1", "text": { "path": "/title" } },
-        {
-          "id": "item-list",
-          "component": "List",
-          "direction": "vertical",
-          "children": { "componentId": "item-card-template", "path": "/items" }
-        },
-        { "id": "item-card-template", "component": "Card", "child": "card-layout" },
-        { "id": "card-layout", "component": "Row", "children": ["card-image", "card-details"] },
-        { "id": "card-image", "component": "Image", "variant": "mediumFeature", "weight": 1, "url": { "path": "imageUrl" } },
-        { "id": "card-details", "component": "Column", "weight": 2, "children": ["template-name", "template-rating", "template-detail", "template-link", "template-book-button"] },
-        { "id": "template-name", "component": "Text", "variant": "h3", "text": { "path": "name" } },
-        { "id": "template-rating", "component": "Text", "text": { "path": "rating" } },
-        { "id": "template-detail", "component": "Text", "text": { "path": "detail" } },
-        { "id": "template-link", "component": "Text", "text": { "path": "infoLink" } },
-        {
-          "id": "template-book-button",
-          "component": "Button",
-          "child": "book-now-text",
-          "variant": "primary",
-          "action": {
-            "event": {
-              "name": "book_restaurant",
-              "context": {
-                "restaurantName": { "path": "name" },
-                "imageUrl": { "path": "imageUrl" },
-                "address": { "path": "address" }
-              }
-            }
-          }
-        },
-        { "id": "book-now-text", "component": "Text", "text": "Book Now" }
-      ]
-    }
-  },
-  { "version": "v0.9", "updateDataModel": { "surfaceId": "default", "path": "/title", "value": "Top Chinese Restaurants in New York" } },
-  { "version": "v0.9", "updateDataModel": { "surfaceId": "default", "path": "/items", "value": [] } }
-]
-</a2ui-json>
-
-When finding restaurants:
-- Fill the "/items" value with restaurant objects containing name, rating, detail, infoLink, imageUrl, and address.
-- Preserve markdown links in infoLink when useful.
-
-When booking a table after a "book_restaurant" action:
-- Create a "booking-form" surface.
-- Use Column root, Text title, Image, address Text, TextField for partySize, DateTimeInput for reservationTime, TextField for dietary, and a submit Button.
-- Use action event name "submit_booking" with context paths for restaurantName, partySize, reservationTime, dietary, and imageUrl.
-
-When confirming a booking after a "submit_booking" action:
-- Create a "confirmation" surface.
-- Use Card root, Column content, Text title, Image, booking details Text, dietary Text, and a final Text message.
-`;
-
-const restaurantData = [
-	{
-		name: "Xi'an Famous Foods",
-		detail: "Spicy and savory hand-pulled noodles.",
-		imageUrl: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400",
-		rating: "★★★★☆",
-		infoLink: "[More Info](https://www.xianfoods.com/)",
-		address: "81 St Marks Pl, New York, NY 10003",
-	},
-	{
-		name: "Han Dynasty",
-		detail: "Authentic Szechuan cuisine.",
-		imageUrl: "https://images.unsplash.com/photo-1525755662778-989d0524087e?w=400",
-		rating: "★★★★☆",
-		infoLink: "[More Info](https://www.handynasty.net/)",
-		address: "90 3rd Ave, New York, NY 10003",
-	},
-	{
-		name: "RedFarm",
-		detail: "Modern Chinese with a farm-to-table approach.",
-		imageUrl: "https://images.unsplash.com/photo-1563245372-f21724e3856d?w=400",
-		rating: "★★★★☆",
-		infoLink: "[More Info](https://www.redfarmnyc.com/)",
-		address: "529 Hudson St, New York, NY 10014",
-	},
-	{
-		name: "Mott 32",
-		detail: "Upscale Cantonese dining.",
-		imageUrl: "https://images.unsplash.com/photo-1552566626-52f8b828add9?w=400",
-		rating: "★★★★★",
-		infoLink: "[More Info](https://mott32.com/newyork/)",
-		address: "111 W 57th St, New York, NY 10019",
-	},
-	{
-		name: "Hwa Yuan Szechuan",
-		detail: "Famous for its cold noodles with sesame sauce.",
-		imageUrl: "https://images.unsplash.com/photo-1555126634-323283e090fa?w=400",
-		rating: "★★★★☆",
-		infoLink: "[More Info](https://hwayuannyc.com/)",
-		address: "40 E Broadway, New York, NY 10002",
-	},
-];
-
-function createRestaurantListMessages(): A2uiMessage[] {
-	return [
-		{
-			version: "v0.9",
-			createSurface: {
-				surfaceId: "default",
-				catalogId: "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
-				theme: { primaryColor: "#FF0000", font: "Roboto" },
-			},
-		},
-		{
-			version: "v0.9",
-			updateComponents: {
-				surfaceId: "default",
-				components: [
-					{
-						id: "root",
-						component: "Column",
-						children: ["title-heading", "item-list"],
-					},
-					{
-						id: "title-heading",
-						component: "Text",
-						variant: "h1",
-						text: { path: "/title" },
-					},
-					{
-						id: "item-list",
-						component: "List",
-						direction: "vertical",
-						children: {
-							componentId: "item-card-template",
-							path: "/items",
-						},
-					},
-					{
-						id: "item-card-template",
-						component: "Card",
-						child: "card-layout",
-					},
-					{
-						id: "card-layout",
-						component: "Row",
-						children: ["template-image", "card-details"],
-					},
-					{
-						id: "template-image",
-						component: "Image",
-						url: { path: "imageUrl" },
-						weight: 1,
-					},
-					{
-						id: "card-details",
-						component: "Column",
-						children: [
-							"template-name",
-							"template-rating",
-							"template-detail",
-							"template-link",
-							"template-book-button",
-						],
-						weight: 2,
-					},
-					{
-						id: "template-name",
-						component: "Text",
-						variant: "h3",
-						text: { path: "name" },
-					},
-					{
-						id: "template-rating",
-						component: "Text",
-						text: { path: "rating" },
-					},
-					{
-						id: "template-detail",
-						component: "Text",
-						text: { path: "detail" },
-					},
-					{
-						id: "template-link",
-						component: "Text",
-						text: { path: "infoLink" },
-					},
-					{
-						id: "template-book-button",
-						component: "Button",
-						child: "book-now-text",
-						variant: "primary",
-						action: {
-							event: {
-								name: "book_restaurant",
-								context: {
-									restaurantName: { path: "name" },
-									imageUrl: { path: "imageUrl" },
-									address: { path: "address" },
-								},
-							},
-						},
-					},
-					{
-						id: "book-now-text",
-						component: "Text",
-						text: "Book Now",
-					},
-				],
-			},
-		},
-		{
-			version: "v0.9",
-			updateDataModel: {
-				surfaceId: "default",
-				path: "/",
-				value: {
-					title: "Top 5 Chinese Restaurants in New York",
-					items: restaurantData.map((restaurant) => ({
-						name: restaurant.name,
-						rating: restaurant.rating,
-						detail: restaurant.detail,
-						infoLink: restaurant.infoLink,
-						imageUrl: restaurant.imageUrl,
-						address: restaurant.address,
-					})),
-				},
-			},
-		},
-	];
-}
-
-function createBookingFormMessages(restaurantName: string, imageUrl: string, address: string): A2uiMessage[] {
-	return [
-		{
-			version: "v0.9",
-			createSurface: {
-				surfaceId: "booking-form",
-				catalogId: "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
-				theme: { primaryColor: "#FF0000", font: "Roboto" },
-			},
-		},
-		{
-			version: "v0.9",
-			updateComponents: {
-				surfaceId: "booking-form",
-				components: [
-					{
-						id: "root",
-						component: "Column",
-						children: [
-							"booking-title",
-							"restaurant-image",
-							"restaurant-address",
-							"party-size-field",
-							"datetime-field",
-							"dietary-field",
-							"submit-button",
-						],
-					},
-					{
-						id: "booking-title",
-						component: "Text",
-						variant: "h2",
-						text: { path: "/title" },
-					},
-					{
-						id: "restaurant-image",
-						component: "Image",
-						url: { path: "/imageUrl" },
-					},
-					{
-						id: "restaurant-address",
-						component: "Text",
-						text: { path: "/address" },
-					},
-					{
-						id: "party-size-field",
-						component: "TextField",
-						label: "Party Size",
-						value: { path: "/partySize" },
-						variant: "number",
-					},
-					{
-						id: "datetime-field",
-						component: "DateTimeInput",
-						label: "Date & Time",
-						value: { path: "/reservationTime" },
-						enableDate: true,
-						enableTime: true,
-					},
-					{
-						id: "dietary-field",
-						component: "TextField",
-						label: "Dietary Requirements",
-						value: { path: "/dietary" },
-					},
-					{
-						id: "submit-button",
-						component: "Button",
-						child: "submit-reservation-text",
-						variant: "primary",
-						action: {
-							event: {
-								name: "submit_booking",
-								context: {
-									restaurantName: { path: "/restaurantName" },
-									partySize: { path: "/partySize" },
-									reservationTime: { path: "/reservationTime" },
-									dietary: { path: "/dietary" },
-									imageUrl: { path: "/imageUrl" },
-								},
-							},
-						},
-					},
-					{
-						id: "submit-reservation-text",
-						component: "Text",
-						text: "Submit Reservation",
-					},
-				],
-			},
-		},
-		{
-			version: "v0.9",
-			updateDataModel: {
-				surfaceId: "booking-form",
-				path: "/",
-				value: {
-					title: `Book a Table at ${restaurantName}`,
-					address: address,
-					restaurantName: restaurantName,
-					partySize: "2",
-					reservationTime: "",
-					dietary: "",
-					imageUrl: imageUrl,
-				},
-			},
-		},
-	];
-}
-
-function createConfirmationMessages(
-	restaurantName: string,
-	partySize: string,
-	reservationTime: string,
-	dietary: string,
-	imageUrl: string,
-): A2uiMessage[] {
-	return [
-		{
-			version: "v0.9",
-			createSurface: {
-				surfaceId: "confirmation",
-				catalogId: "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
-				theme: { primaryColor: "#FF0000", font: "Roboto" },
-			},
-		},
-		{
-			version: "v0.9",
-			updateComponents: {
-				surfaceId: "confirmation",
-				components: [
-					{
-						id: "root",
-						component: "Card",
-						child: "confirmation-column",
-					},
-					{
-						id: "confirmation-column",
-						component: "Column",
-						children: [
-							"confirm-title",
-							"confirm-image",
-							"divider1",
-							"confirm-details",
-							"divider2",
-							"confirm-dietary",
-							"divider3",
-							"confirm-text",
-						],
-					},
-					{
-						id: "confirm-title",
-						component: "Text",
-						variant: "h2",
-						text: { path: "/title" },
-					},
-					{
-						id: "confirm-image",
-						component: "Image",
-						url: { path: "/imageUrl" },
-					},
-					{
-						id: "confirm-details",
-						component: "Text",
-						text: { path: "/bookingDetails" },
-					},
-					{
-						id: "confirm-dietary",
-						component: "Text",
-						text: { path: "/dietaryRequirements" },
-					},
-					{
-						id: "confirm-text",
-						component: "Text",
-						variant: "h5",
-						text: "We look forward to seeing you!",
-					},
-					{ id: "divider1", component: "Divider" },
-					{ id: "divider2", component: "Divider" },
-					{ id: "divider3", component: "Divider" },
-				],
-			},
-		},
-		{
-			version: "v0.9",
-			updateDataModel: {
-				surfaceId: "confirmation",
-				path: "/",
-				value: {
-					title: `Booking Confirmed at ${restaurantName}`,
-					bookingDetails: `${partySize} people at ${reservationTime || "TBD"}`,
-					dietaryRequirements: dietary ? `Dietary Requirements: ${dietary}` : "No dietary requirements specified",
-					imageUrl: imageUrl,
-				},
-			},
-		},
-	];
-}
 
 function getMessageText(message: any): string {
 	if (!message || !message.content) return "";
@@ -638,19 +200,7 @@ function normalizeA2uiMessages(messages: A2uiMessage[]): A2uiMessage[] {
 
 		const varName = templateMatch[1].trim();
 		let path = varName;
-		if (
-			varName === "title" ||
-			varName === "partySize" ||
-			varName === "reservationTime" ||
-			varName === "dietary" ||
-			varName === "restaurantName"
-		) {
-			path = `/${varName}`;
-		} else if (varName === "imageUrl" || varName === "address") {
-			path = templatePath ? varName : `/${varName}`;
-		} else if (varName === "name" || varName === "rating" || varName === "detail" || varName === "infoLink") {
-			path = varName;
-		} else if (!varName.startsWith("/")) {
+		if (!varName.startsWith("/")) {
 			path = templatePath ? varName : `/${varName}`;
 		}
 
@@ -703,7 +253,59 @@ function normalizeA2uiMessages(messages: A2uiMessage[]): A2uiMessage[] {
 		}
 	};
 
+	const SPLIT_KEYS = ["createSurface", "updateComponents", "updateDataModel", "deleteSurface"];
+
+	// Step 0: Split combined messages (multiple update types in one object)
+	const splitMessages: A2uiMessage[] = [];
+	for (const msg of messages) {
+		const keys = SPLIT_KEYS.filter((k) => k in msg);
+		if (keys.length <= 1) {
+			splitMessages.push(msg);
+		} else {
+			for (const key of keys) {
+				splitMessages.push({ version: msg.version, [key]: (msg as any)[key] } as A2uiMessage);
+			}
+		}
+	}
+	messages = splitMessages;
+
+	// Step 0.1: Fill missing surfaceId (default to "default")
+	for (const msg of messages) {
+		if (isRecord(msg)) {
+			if ("updateComponents" in msg && isRecord(msg.updateComponents) && !msg.updateComponents.surfaceId) {
+				msg.updateComponents.surfaceId = "default";
+			}
+			if ("updateDataModel" in msg && isRecord(msg.updateDataModel) && !msg.updateDataModel.surfaceId) {
+				msg.updateDataModel.surfaceId = "default";
+			}
+		}
+	}
+
+	// Step 0.2: Auto-generate createSurface if missing (LLM often skips this)
+	const hasCreateSurface = messages.some((m) => "createSurface" in m);
+	const hasUpdateOrData = messages.some((m) => "updateComponents" in m || "updateDataModel" in m);
+	if (!hasCreateSurface && hasUpdateOrData) {
+		const catalogId = (messages[0] as any)?.catalogId ?? (messages[0] as any)?.createSurface?.catalogId;
+		const version = (messages[0] as any)?.version ?? "v0.9";
+		messages = [
+			{
+				version,
+				createSurface: {
+					surfaceId: "default",
+					catalogId: typeof catalogId === "string" ? catalogId : "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json",
+				},
+			} as A2uiMessage,
+			...messages,
+		];
+	}
+
 	const normalizeComponentFields = (comp: MutableRecord, templatePath?: string) => {
+		// Normalize componentId -> id
+		if (comp.componentId !== undefined && comp.id === undefined) {
+			comp.id = comp.componentId;
+			delete comp.componentId;
+		}
+
 		if (comp.type && !comp.component) {
 			const type = getString(comp.type);
 			if (type && /^[A-Z][a-zA-Z0-9_]*$/.test(type)) {
@@ -1002,6 +604,41 @@ function normalizeA2uiMessages(messages: A2uiMessage[]): A2uiMessage[] {
 					}
 				}
 
+				// Fill dangling child references (LLM references components it never defined)
+				const definedIds = new Set(dedupedList.map((c) => String(c.id)));
+				const referencedIds = new Set<string>();
+				for (const comp of dedupedList) {
+					if (typeof comp.child === "string") referencedIds.add(comp.child);
+					if (Array.isArray(comp.children)) {
+						for (const c of comp.children) {
+							if (typeof c === "string") referencedIds.add(c);
+						}
+					}
+					if (isRecord(comp.children) && typeof comp.children.componentId === "string") {
+						referencedIds.add(comp.children.componentId);
+					}
+				}
+				for (const refId of referencedIds) {
+					if (!definedIds.has(refId)) {
+						dedupedList.push({ id: refId, component: "Text", text: "" });
+					}
+				}
+
+				// Fix List children: LLM often outputs "children":["template-id"] instead of {componentId,path}
+				for (const comp of dedupedList) {
+					const compName = getComponentName(comp);
+					if (compName === "List" && Array.isArray(comp.children) && comp.children.length === 1 && typeof comp.children[0] === "string") {
+						const templateId = comp.children[0] as string;
+						const template = dedupedList.find((c) => c.id === templateId);
+						if (template && typeof template.path === "string") {
+							comp.children = { componentId: templateId, path: template.path as string };
+							delete template.path;
+						} else {
+							comp.children = { componentId: templateId, path: "/items" };
+						}
+					}
+				}
+
 				payload.components = dedupedList;
 			}
 		}
@@ -1014,43 +651,87 @@ function parseIncrementalA2uiJson(text: string): A2uiMessage[] {
 	const startTag = "<a2ui-json>";
 	const endTag = "</a2ui-json>";
 	const startIndex = text.indexOf(startTag);
-	if (startIndex === -1) return [];
 
-	let jsonContent = text.slice(startIndex + startTag.length);
-	const endIndex = jsonContent.indexOf(endTag);
-	if (endIndex !== -1) {
-		jsonContent = jsonContent.slice(0, endIndex);
-	}
+	let jsonContent: string | undefined;
 
-	jsonContent = jsonContent.trim();
-	if (!jsonContent) return [];
-
-	try {
-		return normalizeA2uiMessages(JSON.parse(jsonContent));
-	} catch (_) {
-		if (jsonContent.startsWith("[")) {
-			for (let i = jsonContent.length; i > 0; i--) {
-				const candidate = jsonContent.slice(0, i).trim();
-				if (candidate.endsWith("}")) {
-					try {
-						return normalizeA2uiMessages(JSON.parse(`${candidate}]`));
-					} catch (_) {}
-				}
-			}
+	if (startIndex !== -1) {
+		jsonContent = text.slice(startIndex + startTag.length);
+		const endIndex = jsonContent.indexOf(endTag);
+		if (endIndex !== -1) {
+			jsonContent = jsonContent.slice(0, endIndex);
+		}
+	} else {
+		// Fallback 1: markdown code block ```json ... ```
+		const mdMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+		if (mdMatch) {
+			jsonContent = mdMatch[1].trim();
 		}
 	}
-	return [];
+
+	if (!jsonContent) {
+		// Fallback 2: try the raw text itself (pure JSON)
+		jsonContent = text.trim();
+	}
+
+	if (!jsonContent) return [];
+
+	// Repair common LLM JSON errors
+	const repaired = jsonContent
+		// Missing opening brace before key: },"version":" -> },{"version":"
+		.replace(/},(\s*"(version|createSurface|updateComponents|updateDataModel|deleteSurface)")/g, (_, cap) => `},{${cap}`)
+		// Strip backticks and trim whitespace from catalogId values
+		// LLM wraps: " `https://...` " -> "https://..."
+		.replace(/"catalogId"\s*:\s*"\s*`\s*([^"]*?)\s*`\s*"/g, '"catalogId":"$1"')
+		// Also strip backticks from catalogId without leading/trailing spaces
+		.replace(/"catalogId"\s*:\s*"`([^"]*)`"/g, '"catalogId":"$1"');
+
+	let parsed: any;
+	try {
+		parsed = JSON.parse(repaired);
+		if (!Array.isArray(parsed)) {
+			parsed = [parsed];
+		}
+	} catch (_) {
+		// Partial JSON: try to close truncated arrays (try repaired first, then raw)
+		const attempts = [repaired, jsonContent];
+		for (const attempt of attempts) {
+			if (attempt.startsWith("[")) {
+				for (let i = attempt.length; i > 0; i--) {
+					const candidate = attempt.slice(0, i).trim();
+					if (candidate.endsWith("}")) {
+						try {
+							parsed = JSON.parse(`${candidate}]`);
+							break;
+						} catch (_) {}
+					}
+				}
+			}
+			if (parsed) break;
+		}
+	}
+
+	if (!parsed) return [];
+	return normalizeA2uiMessages(parsed);
 }
 
-let isA2uiMode = false;
+let isA2uiMode = true;
 let a2uiRequesting = false;
 let a2uiError: string | null = null;
-let a2uiMockMode = false;
 let a2uiProcessor: MessageProcessor<LitComponentApi>;
 let a2uiSurfaces: any[] = [];
 let a2uiUnsubscribes: (() => void)[] = [];
 let a2uiMessages: A2uiMessage[] = [];
 let a2uiRawText = "";
+
+function approveArchiveOperationFromAction(action: unknown): boolean {
+	if (!action || typeof action !== "object") return false;
+	const context = "context" in action ? action.context : undefined;
+	const approval = readArchiveOperationRequest(context);
+	if (!approval) return false;
+
+	approvedArchiveOperations.set(approval.confirmationKey, buildArchiveOperationFingerprint(approval.request));
+	return true;
+}
 
 const initA2ui = () => {
 	for (const unsub of a2uiUnsubscribes) {
@@ -1063,6 +744,16 @@ const initA2ui = () => {
 
 	a2uiProcessor = new MessageProcessor([basicCatalog], (action: any) => {
 		console.log("User action received from A2UI:", action);
+		if (action?.name === "archive.cancelOperation") {
+			const response = createArchiveActionCancelledMessages();
+			a2uiProcessor.processMessages(response);
+			a2uiMessages = response;
+			renderApp();
+			return;
+		}
+		if (action?.name === "archive.confirmOperation") {
+			approveArchiveOperationFromAction(action);
+		}
 		sendAndProcessA2ui({ version: "v0.9", action });
 	});
 
@@ -1085,65 +776,31 @@ const sendAndProcessA2ui = async (message: any) => {
 	renderApp();
 
 	try {
-		if (a2uiMockMode) {
-			await new Promise((resolve) => setTimeout(resolve, 800));
-			let response: A2uiMessage[] = [];
-
-			if (typeof message === "object" && message.action) {
-				const action = message.action;
-				const context = action.context || {};
-				if (action.name === "book_restaurant") {
-					response = createBookingFormMessages(
-						String(context.restaurantName || "Restaurant"),
-						String(context.imageUrl || ""),
-						String(context.address || ""),
-					);
-				} else if (action.name === "submit_booking") {
-					response = createConfirmationMessages(
-						String(context.restaurantName || "Restaurant"),
-						String(context.partySize || "2"),
-						String(context.reservationTime || ""),
-						String(context.dietary || ""),
-						String(context.imageUrl || ""),
-					);
-				} else {
-					response = createRestaurantListMessages();
-				}
-			} else {
-				response = createRestaurantListMessages();
-			}
-
-			a2uiProcessor.processMessages(response);
-			a2uiMessages = response;
-			a2uiRequesting = false;
-			renderApp();
-		} else {
-			const provider = agent.state.model?.provider;
-			if (provider && !(await providerKeys.get(provider))) {
-				const ok = await ApiKeyPromptDialog.prompt(provider);
-				if (!ok) {
-					a2uiRequesting = false;
-					renderApp();
-					return;
-				}
-			}
-
-			if (typeof message === "string") {
-				Array.from(a2uiProcessor.model.surfacesMap.keys()).forEach((id) => {
-					a2uiProcessor.model.deleteSurface(id);
-				});
-				a2uiSurfaces = [];
-				a2uiMessages = [];
-				a2uiRawText = "";
+		const provider = agent.state.model?.provider;
+		if (provider && !(await providerKeys.get(provider))) {
+			const ok = await ApiKeyPromptDialog.prompt(provider);
+			if (!ok) {
+				a2uiRequesting = false;
 				renderApp();
-
-				agent.reset();
-				agent.state.systemPrompt = A2UI_SYSTEM_PROMPT;
-				agent.state.tools = [];
-				await agent.prompt(message);
-			} else {
-				await agent.prompt(JSON.stringify(message));
+				return;
 			}
+		}
+
+		if (typeof message === "string") {
+			Array.from(a2uiProcessor.model.surfacesMap.keys()).forEach((id) => {
+				a2uiProcessor.model.deleteSurface(id);
+			});
+			a2uiSurfaces = [];
+			a2uiMessages = [];
+			a2uiRawText = "";
+			renderApp();
+
+			agent.reset();
+			agent.state.systemPrompt = ARCHIVE_MANAGER_SYSTEM_PROMPT;
+			agent.state.tools = [archiveApiTool];
+			await agent.prompt(message);
+		} else {
+			await agent.prompt(JSON.stringify(message));
 		}
 	} catch (err: any) {
 		console.error("Error running A2UI flow:", err);
@@ -1269,10 +926,18 @@ Feel free to use these tools when needed to provide accurate and helpful respons
 		},
 		// Custom transformer: convert custom messages to LLM-compatible format
 		convertToLlm: customConvertToLlm,
+		getApiKey: async (provider: string) => {
+			const key = await providerKeys.get(provider);
+			return key ?? undefined;
+		},
+		streamFn: createStreamFn(async () => {
+			const enabled = await settings.get<boolean>("proxy.enabled");
+			return enabled ? (await settings.get<string>("proxy.url")) || undefined : undefined;
+		}),
 	});
 
 	agentUnsubscribe = agent.subscribe((event: any) => {
-		if (isA2uiMode && !a2uiMockMode) {
+		if (isA2uiMode) {
 			try {
 				if (event.type === "message_start") {
 					a2uiRequesting = true;
@@ -1300,6 +965,8 @@ Feel free to use these tools when needed to provide accurate and helpful respons
 					a2uiRequesting = false;
 					if (agent.state.errorMessage) {
 						a2uiError = agent.state.errorMessage;
+					} else if (!a2uiError && a2uiMessages.length === 0 && a2uiRawText.length > 0) {
+						a2uiError = "LLM 返回了内容但未包含有效的 A2UI JSON。请展开下方「Raw LLM Output Stream」查看原始输出。";
 					}
 					renderApp();
 				}
@@ -1349,12 +1016,7 @@ Feel free to use these tools when needed to provide accurate and helpful respons
 				searchTool.tavilyApiKey = config.apiKeys.tavily;
 			}
 
-			// Create API query tool for backend data access
-			const apiTool = createApiQueryTool();
-			apiTool.baseUrl = config.api.baseUrl;
-			apiTool.authToken = apiAuthToken;
-
-			return [replTool, searchTool, apiTool];
+			return [replTool, searchTool, archiveApiTool];
 		},
 	});
 };
@@ -1400,20 +1062,18 @@ const renderA2uiContent = () => {
 	return html`
 		<div class="flex-1 overflow-y-auto relative">
 			<div class="shell">
-				<!-- Mock Mode badge -->
-				${a2uiMockMode ? html`<div class="mock-badge">Mock Mode</div>` : ""}
-
 				<!-- Initial search form -->
 				${
 					showForm
 						? html`
 						<form class="search-form" @submit=${handleA2uiSubmit}>
-							<div class="hero-img" style="--background-image-light: url(https://images.unsplash.com/photo-1525755662778-989d0524087e?w=800); --background-image-dark: url(https://images.unsplash.com/photo-1525755662778-989d0524087e?w=800)"></div>
-							<h1 class="app-title">Restaurant Finder</h1>
+							<div class="archive-kicker">AI-native Archive Manager</div>
+							<h1 class="app-title">Archive Manager</h1>
+							<p class="app-subtitle">用自然语言查询、编制、审核、签章、预检和归档工程档案。</p>
 							<div class="input-row">
 								<input
 									required
-									placeholder="Find me the top Chinese restaurants in NY"
+									placeholder="例如：查看仪表盘统计和最近项目"
 									autoComplete="off"
 									id="a2ui-query"
 									name="query"
@@ -1425,19 +1085,20 @@ const renderA2uiContent = () => {
 								</button>
 							</div>
 
-							<!-- Mode option switcher -->
-							<div class="mode-selector-row">
-								<label class="mode-checkbox">
-									<input
-										type="checkbox"
-										.checked=${a2uiMockMode}
-										@change=${(e: Event) => {
-											a2uiMockMode = (e.target as HTMLInputElement).checked;
-											renderApp();
-										}}
-									/>
-									Run in Mock Mode (No LLM required)
-								</label>
+							<div class="quick-prompts">
+								${ARCHIVE_QUICK_PROMPTS.map(
+									(prompt) => html`
+										<button
+											type="button"
+											class="quick-prompt"
+											@click=${() => {
+												sendAndProcessA2ui(prompt);
+											}}
+										>
+											${prompt}
+										</button>
+									`,
+								)}
 							</div>
 						</form>
 					`
@@ -1450,7 +1111,7 @@ const renderA2uiContent = () => {
 						? html`
 						<div class="pending">
 							<div class="spinner"></div>
-							<div class="loading-text">Finding restaurants...</div>
+							<div class="loading-text">Archive Manager agent is working...</div>
 						</div>
 					`
 						: ""
@@ -1577,7 +1238,7 @@ const renderApp = () => {
 								>
 									${currentTitle}
 								</button>`
-							: html`<span class="text-base font-semibold text-foreground">Pi Web UI Example</span>`
+							: html`<span class="text-base font-semibold text-foreground">Archive Manager</span>`
 					}
 				</div>
 				<div class="flex items-center gap-1 px-2">
@@ -1592,7 +1253,7 @@ const renderApp = () => {
 							}
 							renderApp();
 						},
-						title: isA2uiMode ? "Switch to standard Chat" : "Switch to A2UI Demo Mode",
+						title: isA2uiMode ? "Switch to standard Chat" : "Switch to Archive Manager A2UI",
 					})}
 					${Button({
 						variant: "ghost",
@@ -1684,6 +1345,10 @@ async function initApp() {
 		}
 	} else {
 		await createAgent();
+	}
+
+	if (isA2uiMode) {
+		initA2ui();
 	}
 
 	renderApp();
