@@ -741,7 +741,7 @@ function parseIncrementalA2uiJson(text: string): A2uiMessage[] {
 	const repaired = jsonContent
 		// Missing opening brace before key: },"version":" -> },{"version":"
 		.replace(
-			/},(\s*"(version|createSurface|updateComponents|updateDataModel|deleteSurface)")/g,
+			/(?<!})},(\s*"(version|createSurface|updateComponents|updateDataModel|deleteSurface)")/g,
 			(_, cap) => `},{${cap}`,
 		)
 		// Strip backticks and trim whitespace from catalogId values
