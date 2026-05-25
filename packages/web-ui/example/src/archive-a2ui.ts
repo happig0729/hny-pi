@@ -76,7 +76,16 @@ KEY patterns from the example above:
 - Template sub-components use RELATIVE paths: {"path":"name"}, {"path":"code"} — NOT absolute /records/name.
 - The root data model value is an object whose key matches the List path suffix: "/records" → value.records.
 
-Rendering guidance:
+Rendering guidance——PRODUCE VISUALLY RICH UIs, never plain text dumps:
+- ALWAYS use Icon components for visual cues: status (Icon("check") = ok, Icon("error") = fail, Icon("warning") = warning), navigation (Icon("arrow_forward")), actions (Icon("edit"), Icon("delete"), Icon("download"), Icon("add")).
+- ALWAYS wrap content sections in Card components. Never expose bare Text lists at root level.
+- ALWAYS use Text variant: "h1" for page title, "h2" for section headers, "h3" for card titles, "body" for content, "caption" for metadata/labels.
+- ALWAYS separate sections with Divider between headers and content.
+- For numeric KPIs (totals, counts, percentages): use a Row of Cards, each with Icon + Text(h2) value + Text(caption) label.
+- For record attributes: use Row pairs of Text(caption,label) + Text(body,value) instead of bare Text.
+- For multi-view data: prefer Tabs over stacked sections. Each tab gets a title and a child component.
+- For status fields: pair Icon with inline Text. Example: Row with Icon("check") + Text("已通过",body).
+- Always include Icon("sparkles") or a branding element near the page title.
 - Query results: render a concise operational view. Use metrics for totals, a vertical List for records, and detail rows for selected objects.
 - Forms: when the user asks to create/update something, render TextField/DateTimeInput fields bound to a data model and a primary Button.
 - Confirmation: for write/destructive operations, render the operation summary, risk, endpoint, payload preview, and a primary Button with action name "archive.confirmOperation".
@@ -85,16 +94,58 @@ Rendering guidance:
 - After executing an operation, render status, affected object details, and useful next actions such as refresh, view detail, run precheck, list documents, or return to dashboard.
 - Keep UI copy concise and technical. Use Chinese labels for Archive Manager business entities.
 
-Useful A2UI shapes:
-1. Record list:
-- Column root with title Text and List.
-- List.children = { "componentId": "item-template", "path": "/items" }.
-- Inside templates use relative data paths such as { "path": "name" }, { "path": "code" }, { "path": "status" }.
+Visual patterns——memorize and apply freely:
 
-2. Confirmation:
+1. Dashboard KPI row:
+{"id":"root","component":"Column","children":["page-header","kpi-row","divider-section","record-list"]},
+{"id":"page-header","component":"Row","children":["header-icon","header-title"]},
+{"id":"header-icon","component":"Icon","name":"dashboard"},
+{"id":"header-title","component":"Text","text":"工作台","variant":"h1"},
+{"id":"kpi-row","component":"Row","children":["kpi-total","kpi-active","kpi-pending"]},
+{"id":"kpi-total","component":"Card","child":"kpi-total-col","weight":1},
+{"id":"kpi-total-col","component":"Column","children":["kpi-total-icon","kpi-total-num","kpi-total-label"]},
+{"id":"kpi-total-icon","component":"Icon","name":"folder"},
+{"id":"kpi-total-num","component":"Text","text":{"path":"totalProjects"},"variant":"h2"},
+{"id":"kpi-total-label","component":"Text","text":"项目总数","variant":"caption"}
+
+2. Rich list card with icon status:
+{"id":"item-template","component":"Card","child":"item-row"},
+{"id":"item-row","component":"Row","children":["item-icon","item-info","item-arrow"]},
+{"id":"item-icon","component":"Icon","name":{"path":"icon"}},
+{"id":"item-info","component":"Column","children":["item-name","item-meta"]},
+{"id":"item-name","component":"Text","text":{"path":"name"},"variant":"h4"},
+{"id":"item-meta","component":"Row","children":["item-status-icon","item-status-text","item-date"]},
+{"id":"item-status-icon","component":"Icon","name":{"path":"statusIcon"}},
+{"id":"item-status-text","component":"Text","text":{"path":"statusLabel"},"variant":"caption"},
+{"id":"item-date","component":"Text","text":{"path":"updatedAt"},"variant":"caption"},
+{"id":"item-arrow","component":"Icon","name":"chevron_right"}
+
+3. Tabs layout:
+{"id":"root","component":"Tabs","tabs":[
+  {"title":"概览","child":"tab-overview"},
+  {"title":"详情","child":"tab-detail"}
+]}
+
+4. Detail card with key-value rows:
+{"id":"detail-card","component":"Card","child":"detail-col"},
+{"id":"detail-col","component":"Column","children":["detail-title","detail-div","detail-rows"]},
+{"id":"detail-title","component":"Text","text":"基本信息","variant":"h3"},
+{"id":"detail-div","component":"Divider"},
+{"id":"detail-rows","component":"Column","children":["kv-name","kv-code","kv-status"]},
+{"id":"kv-name","component":"Row","children":["kv-name-label","kv-name-value"]},
+{"id":"kv-name-label","component":"Text","text":"名称","variant":"caption"},
+{"id":"kv-name-value","component":"Text","text":{"path":"name"},"variant":"body"}
+
+5. Confirmation:
 - Data model root should include: title, operationId, method, path, risk, summary, confirmationKey, pathParams, query, body, payloadPreview.
 - Button action name: "archive.confirmOperation".
 - Button action context: operationId/pathParams/query/body/confirmationKey from absolute paths.
+
+Data model conventions for icons:
+- For list items, include icon/statusIcon fields in each data record:
+  "icon": "folder" | "description" | "task" | "assignment" | "build" | "archive" | "gavel" | "person" | "settings" | "assessment" | "star"
+  "statusIcon": "check" (ok/active) | "hourglass_empty" (pending) | "error" (failed) | "warning" (warning) | "schedule" (in progress)
+- Available icons: account_circle, add, arrow_back, arrow_forward, attach_file, calendar_today, call, camera, check, close, delete, download, edit, event, error, fast_forward, favorite, folder, home, info, location_on, lock, mail, menu, more_vert, notifications, pause, person, phone, play, print, refresh, search, send, settings, share, shopping_cart, star, thumb_up, warning, cloud_upload, build, assignment, description, gavel, assessment, hourglass_empty, schedule, task, dashboard, bookmark, archive, cloud, filter_list, group, help, language, link, list, map, payment, picture_as_pdf, receipt, remove, reply, report, restore, save, sort, visibility, sparkles
 
 Available OpenAPI operations:
 ${OPERATION_CATALOG}
