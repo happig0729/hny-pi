@@ -319,31 +319,116 @@
 	transform: none;
 }
 
-.quick-prompts {
+.homepage-ontology {
 	width: 100%;
-	max-width: 720px;
+	max-width: 920px;
+	margin-top: 4px;
+}
+
+.homepage-ontology-header {
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 10px;
+}
+
+.homepage-ontology-title {
+	margin-top: 2px;
+	font-size: 13.5px;
+	font-weight: 800;
+	color: light-dark(var(--n-10), var(--n-95));
+}
+
+.homepage-ontology-note {
+	font-size: 12px;
+	font-weight: 700;
+	color: light-dark(var(--n-45), var(--n-70));
+	text-align: right;
+}
+
+.homepage-ontology-grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 	gap: 8px;
 }
 
-.quick-prompt {
-	min-height: 40px;
+.homepage-ontology-card {
+	min-height: 104px;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 5px;
 	border: 1px solid light-dark(var(--n-80), var(--n-25));
 	border-radius: 8px;
 	background: light-dark(var(--n-100), var(--n-10));
 	color: light-dark(var(--n-20), var(--n-80));
-	font-size: 13px;
-	line-height: 1.35;
 	text-align: left;
-	padding: 10px 12px;
+	padding: 9px 10px;
 	cursor: pointer;
 	transition: border-color 0.2s, background-color 0.2s;
 }
 
-.quick-prompt:hover {
+.homepage-ontology-card:hover {
 	border-color: #2563eb;
 	background: light-dark(#f8fbff, var(--n-15));
+}
+
+.homepage-ontology-card-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+	font-size: 10.5px;
+	font-weight: 800;
+	color: light-dark(var(--n-45), var(--n-70));
+}
+
+.homepage-ontology-card-header span:last-child,
+.homepage-ontology-card-op {
+	max-width: 112px;
+	min-height: 18px;
+	display: inline-flex;
+	align-items: center;
+	padding: 1px 6px;
+	border-radius: 999px;
+	background: light-dark(#f1f5f9, #20232b);
+	color: light-dark(#475569, #d7dce8);
+	font-size: 10px;
+	font-weight: 800;
+	line-height: 1.2;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.homepage-ontology-card.write .homepage-ontology-card-header span:last-child {
+	color: light-dark(#92400e, #fcd34d);
+	background: light-dark(#fffbeb, #2b2112);
+}
+
+.homepage-ontology-card.destructive .homepage-ontology-card-header span:last-child {
+	color: light-dark(var(--e-40), var(--e-80));
+	background: light-dark(var(--e-95), #2a1214);
+}
+
+.homepage-ontology-card-title {
+	font-size: 13.5px;
+	font-weight: 800;
+	line-height: 1.25;
+	color: light-dark(var(--n-10), var(--n-95));
+}
+
+.homepage-ontology-card-desc {
+	flex: 1;
+	font-size: 11px;
+	line-height: 1.45;
+	color: light-dark(var(--n-40), var(--n-70));
+}
+
+.homepage-ontology-card-op {
+	align-self: flex-start;
+	max-width: 100%;
 }
 
 .pending {
@@ -441,15 +526,12 @@
 
 /* Raw LLM Output Panel */
 .raw-output-panel {
-	margin: 20px auto;
+	margin: 12px 0 0;
 	width: 100%;
-	max-width: 800px;
 	background: light-dark(var(--n-98), var(--n-10));
 	border: 1px solid light-dark(var(--n-85), var(--n-20));
-	border-radius: 12px;
-	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+	border-radius: 8px;
 	overflow: hidden;
-	animation: fadeIn 0.3s ease-out;
 }
 
 .raw-output-panel details {
@@ -487,7 +569,7 @@
 
 .raw-code {
 	margin: 0;
-	padding: 16px 20px;
+	padding: 14px 16px;
 	background: light-dark(var(--n-99), #0d0e11);
 	overflow-x: auto;
 	font-family: 'Fira Code', 'Courier New', Courier, monospace;
@@ -498,6 +580,11 @@
 	overflow-y: auto;
 	white-space: pre-wrap;
 	word-break: break-all;
+}
+
+.ai-native-raw-output {
+	border-color: light-dark(var(--n-90), var(--nv-25));
+	background: light-dark(var(--n-100), #111318);
 }
 
 /* Compact Search Bar for A2UI when results are shown */
@@ -721,6 +808,124 @@
 	margin-top: 8px;
 	padding-top: 10px;
 	border-top: 1px solid light-dark(var(--n-90), var(--nv-25));
+}
+
+.ai-native-next-actions {
+	width: 100%;
+	margin: 0 auto 12px;
+	padding: 12px;
+	border: 1px solid light-dark(var(--n-90), var(--nv-25));
+	border-radius: 8px;
+	background: light-dark(var(--n-100), #111318);
+}
+
+.ai-native-next-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.ai-native-next-title {
+	margin-top: 2px;
+	font-size: 14px;
+	font-weight: 900;
+	color: light-dark(var(--n-10), var(--n-95));
+}
+
+.ai-native-next-signal {
+	max-width: 48%;
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1.35;
+	text-align: right;
+	color: light-dark(var(--n-40), var(--n-70));
+}
+
+.ai-native-next-list {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+	margin-top: 10px;
+}
+
+.ai-native-next-action {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 8px;
+	min-width: 0;
+	min-height: 76px;
+	padding: 8px 10px;
+	border: 1px solid light-dark(var(--n-90), var(--nv-25));
+	border-radius: 8px;
+	background: light-dark(#fbfcff, #17191f);
+	color: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.ai-native-next-action:hover {
+	border-color: light-dark(#2563eb, #8ab4ff);
+	background: light-dark(#f8fafc, #20232b);
+}
+
+.ai-native-next-action:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.ai-native-next-action-main {
+	min-width: 0;
+}
+
+.ai-native-next-action-title {
+	font-size: 12.5px;
+	font-weight: 800;
+	color: light-dark(var(--n-10), var(--n-95));
+}
+
+.ai-native-next-action-reason {
+	margin-top: 3px;
+	font-size: 11px;
+	line-height: 1.45;
+	color: light-dark(var(--n-40), var(--n-70));
+}
+
+.ai-native-next-action-meta {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.ai-native-next-action-meta span {
+	max-width: 104px;
+	min-height: 18px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 1px 6px;
+	border-radius: 999px;
+	background: light-dark(#f1f5f9, #20232b);
+	color: light-dark(#475569, #d7dce8);
+	font-size: 10px;
+	font-weight: 800;
+	line-height: 1.2;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.ai-native-next-action.write .ai-native-next-action-meta span:first-child {
+	color: light-dark(#92400e, #fcd34d);
+	background: light-dark(#fffbeb, #2b2112);
+}
+
+.ai-native-next-action.destructive .ai-native-next-action-meta span:first-child {
+	color: light-dark(var(--e-40), var(--e-80));
+	background: light-dark(var(--e-95), #2a1214);
 }
 
 .ai-native-summary {
@@ -1287,6 +1492,19 @@
 		width: 100%;
 	}
 
+	.homepage-ontology-header {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+
+	.homepage-ontology-note {
+		text-align: left;
+	}
+
+	.homepage-ontology-grid {
+		grid-template-columns: 1fr;
+	}
+
 	.ai-native-compact {
 		align-items: flex-start;
 		flex-wrap: wrap;
@@ -1315,6 +1533,20 @@
 	}
 
 	.ai-native-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.ai-native-next-header {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+
+	.ai-native-next-signal {
+		max-width: none;
+		text-align: left;
+	}
+
+	.ai-native-next-list {
 		grid-template-columns: 1fr;
 	}
 
