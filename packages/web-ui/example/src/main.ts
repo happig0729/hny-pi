@@ -2257,7 +2257,7 @@ const getBusinessActionRiskLabel = (risk: BusinessOntologyAction["risk"]): strin
 	return labels[risk];
 };
 
-const HOMEPAGE_ONTOLOGY_PROMPTS = createHomepageOntologyPrompts();
+const HOMEPAGE_ONTOLOGY_PROMPTS = createHomepageOntologyPrompts().slice(0, 6);
 
 const renderHomepageOntologyPrompts = () => {
 	return html`
@@ -2285,7 +2285,6 @@ const renderHomepageOntologyPrompts = () => {
 							</div>
 							<div class="homepage-ontology-card-title">${prompt.label}</div>
 							<div class="homepage-ontology-card-desc">${prompt.description}</div>
-							<div class="homepage-ontology-card-op">${prompt.operationId ?? "ontology"}</div>
 						</button>
 					`,
 				)}
@@ -2327,7 +2326,6 @@ const renderAiNativeNextActions = (showForm: boolean) => {
 							</div>
 							<div class="ai-native-next-action-meta">
 								<span>${getBusinessActionRiskLabel(action.risk)}</span>
-								${action.operationId ? html`<span>${action.operationId}</span>` : ""}
 							</div>
 						</button>
 					`,
