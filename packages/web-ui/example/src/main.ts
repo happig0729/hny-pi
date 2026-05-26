@@ -34,12 +34,14 @@ import { ContextProvider } from "@lit/context";
 import { icon } from "@mariozechner/mini-lit";
 import { Button } from "@mariozechner/mini-lit/dist/Button.js";
 import { Input } from "@mariozechner/mini-lit/dist/Input.js";
+import { type AiNativeEvalStatus, evaluateAiNativeTask } from "./ai-native-evals.js";
 import {
-	ARCHIVE_MANAGER_SYSTEM_PROMPT,
-	ARCHIVE_QUICK_PROMPTS,
-	createArchiveActionCancelledMessages,
-} from "./archive-a2ui.js";
-import { evaluateAiNativeTask, type AiNativeEvalStatus } from "./ai-native-evals.js";
+	type BusinessContextSnapshot,
+	type BusinessOntologyAction,
+	createHomepageOntologyPrompts,
+	inferBusinessContext,
+} from "./ai-native-ontology.js";
+import { ARCHIVE_MANAGER_SYSTEM_PROMPT, createArchiveActionCancelledMessages } from "./archive-a2ui.js";
 import {
 	type ArchiveApiParams,
 	type ArchiveApiResult,
@@ -168,10 +170,7 @@ function isJsonRecord(value: unknown): value is JsonRecord {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function addA2uiDiagnostic(
-	diagnostics: A2uiOutputDiagnostic[],
-	diagnostic: Omit<A2uiOutputDiagnostic, "count">,
-) {
+function addA2uiDiagnostic(diagnostics: A2uiOutputDiagnostic[], diagnostic: Omit<A2uiOutputDiagnostic, "count">) {
 	const existing = diagnostics.find((item) => item.code === diagnostic.code && item.detail === diagnostic.detail);
 	if (existing) {
 		existing.count += 1;
@@ -1212,6 +1211,8 @@ interface AiNativeToolTrace {
 interface AiNativeTaskRecord {
 	profile: AiNativeTaskProfile;
 	trace: AiNativeToolTrace[];
+	businessContext: BusinessContextSnapshot;
+	toolResults: ArchiveApiResult[];
 	rawText: string;
 	messages: A2uiMessage[];
 	outputDiagnostics: A2uiOutputDiagnostic[];
@@ -1232,6 +1233,8 @@ type ArchiveManagerSessionData = SessionData & {
 
 let aiNativeTaskProfile: AiNativeTaskProfile | undefined;
 let aiNativeToolTrace: AiNativeToolTrace[] = [];
+let aiNativeToolResults: ArchiveApiResult[] = [];
+let aiNativeBusinessContext: BusinessContextSnapshot | undefined;
 let aiNativeWorkbenchExpanded = false;
 
 const createAiNativeTaskProfile = (query: string): AiNativeTaskProfile => {
@@ -1277,15 +1280,29 @@ const createAiNativeTaskProfile = (query: string): AiNativeTaskProfile => {
 	};
 };
 
+const refreshAiNativeBusinessContext = () => {
+	if (!aiNativeTaskProfile) {
+		aiNativeBusinessContext = undefined;
+		return;
+	}
+
+	aiNativeBusinessContext = inferBusinessContext({
+		query: aiNativeTaskProfile.query,
+		intent: aiNativeTaskProfile.intent,
+		toolResults: aiNativeToolResults,
+		hasSurface: a2uiSurfaces.length > 0,
+		hasError: Boolean(a2uiError),
+		isRequesting: a2uiRequesting,
+	});
+};
+
 const updateAiNativeStage = (stage: AiNativeTaskStage) => {
 	if (!aiNativeTaskProfile) return;
 	aiNativeTaskProfile = { ...aiNativeTaskProfile, stage, updatedAt: new Date().toISOString() };
+	refreshAiNativeBusinessContext();
 };
 
-const getAiNativeStepStatus = (
-	currentStage: AiNativeTaskStage,
-	stepStage: AiNativeTaskStage,
-): AiNativeStepStatus => {
+const getAiNativeStepStatus = (currentStage: AiNativeTaskStage, stepStage: AiNativeTaskStage): AiNativeStepStatus => {
 	const stageOrder: AiNativeTaskStage[] = ["understanding", "planning", "executing", "rendering", "ready"];
 	const currentIndex = stageOrder.indexOf(currentStage);
 	const stepIndex = stageOrder.indexOf(stepStage);
@@ -1357,10 +1374,17 @@ const handleArchiveToolEvent = (event: AgentEvent) => {
 	if (event.type !== "tool_execution_end") return;
 
 	const details = getArchiveToolResultDetails(event.result);
+	if (details) {
+		aiNativeToolResults = [...aiNativeToolResults, details];
+	}
 	aiNativeToolTrace = aiNativeToolTrace.map((trace) => {
 		if (trace.id !== event.toolCallId) return trace;
 		const operation = details?.operation;
-		const status: AiNativeTraceStatus = details?.requiresConfirmation ? "waiting" : event.isError ? "error" : "success";
+		const status: AiNativeTraceStatus = details?.requiresConfirmation
+			? "waiting"
+			: event.isError
+				? "error"
+				: "success";
 		return {
 			...trace,
 			mode: details?.mode ?? trace.mode,
@@ -1380,9 +1404,21 @@ const handleArchiveToolEvent = (event: AgentEvent) => {
 
 const createAiNativeTaskRecord = (): AiNativeTaskRecord | undefined => {
 	if (!aiNativeTaskProfile) return undefined;
+	refreshAiNativeBusinessContext();
 	return {
 		profile: aiNativeTaskProfile,
 		trace: aiNativeToolTrace,
+		businessContext:
+			aiNativeBusinessContext ??
+			inferBusinessContext({
+				query: aiNativeTaskProfile.query,
+				intent: aiNativeTaskProfile.intent,
+				toolResults: aiNativeToolResults,
+				hasSurface: a2uiSurfaces.length > 0,
+				hasError: Boolean(a2uiError),
+				isRequesting: a2uiRequesting,
+			}),
+		toolResults: aiNativeToolResults,
 		rawText: a2uiRawText,
 		messages: a2uiMessages,
 		outputDiagnostics: a2uiOutputDiagnostics,
@@ -1397,6 +1433,17 @@ const restoreAiNativeTask = (sessionData: ArchiveManagerSessionData) => {
 
 	aiNativeTaskProfile = task.profile;
 	aiNativeToolTrace = task.trace;
+	aiNativeToolResults = task.toolResults ?? [];
+	aiNativeBusinessContext =
+		task.businessContext ??
+		inferBusinessContext({
+			query: task.profile.query,
+			intent: task.profile.intent,
+			toolResults: aiNativeToolResults,
+			hasSurface: task.surfaceCount > 0,
+			hasError: Boolean(task.error),
+			isRequesting: false,
+		});
 	a2uiRawText = task.rawText;
 	a2uiMessages = task.messages;
 	a2uiOutputDiagnostics = task.outputDiagnostics ?? [];
@@ -1416,6 +1463,8 @@ const getAiNativeGovernanceChecks = (taskProfile: AiNativeTaskProfile): AiNative
 	const completedTraces = aiNativeToolTrace.filter((trace) => trace.status === "success");
 	const hasRenderableUi = a2uiMessages.length > 0 && (a2uiSurfaces.length > 0 || taskProfile.stage === "ready");
 	const outputDiagnosticStatus = getA2uiDiagnosticStatus(a2uiOutputDiagnostics);
+	refreshAiNativeBusinessContext();
+	const nextActionCount = aiNativeBusinessContext?.nextActions.length ?? 0;
 
 	return [
 		{
@@ -1449,7 +1498,14 @@ const getAiNativeGovernanceChecks = (taskProfile: AiNativeTaskProfile): AiNative
 		{
 			id: "tool-result",
 			label: "工具结果",
-			status: failedTraces.length > 0 ? "fail" : completedTraces.length > 0 ? "pass" : a2uiRequesting ? "warning" : "fail",
+			status:
+				failedTraces.length > 0
+					? "fail"
+					: completedTraces.length > 0
+						? "pass"
+						: a2uiRequesting
+							? "warning"
+							: "fail",
 			detail:
 				failedTraces.length > 0
 					? failedTraces.map((trace) => trace.error ?? `${trace.operationId ?? "archive_api"} 执行失败`).join("；")
@@ -1476,6 +1532,17 @@ const getAiNativeGovernanceChecks = (taskProfile: AiNativeTaskProfile): AiNative
 			label: "A2UI 质量",
 			status: outputDiagnosticStatus,
 			detail: formatA2uiDiagnosticSummary(a2uiOutputDiagnostics),
+		},
+		{
+			id: "next-actions",
+			label: "下一步推荐",
+			status: nextActionCount > 0 ? "pass" : a2uiRequesting ? "warning" : "fail",
+			detail:
+				nextActionCount > 0
+					? `已基于本体生成 ${nextActionCount} 个推荐动作。`
+					: a2uiRequesting
+						? "等待工具结果和业务上下文。"
+						: "未生成可执行的下一步推荐。",
 		},
 		{
 			id: "replay",
@@ -1516,6 +1583,8 @@ const initA2ui = () => {
 	a2uiOutputDiagnostics = [];
 	aiNativeTaskProfile = undefined;
 	aiNativeToolTrace = [];
+	aiNativeToolResults = [];
+	aiNativeBusinessContext = undefined;
 	aiNativeWorkbenchExpanded = false;
 
 	a2uiProcessor = new MessageProcessor([basicCatalog], (action: any) => {
@@ -1570,6 +1639,8 @@ const sendAndProcessA2ui = async (message: any) => {
 			a2uiLastQuery = message;
 			aiNativeTaskProfile = createAiNativeTaskProfile(message);
 			aiNativeToolTrace = [];
+			aiNativeToolResults = [];
+			refreshAiNativeBusinessContext();
 			aiNativeWorkbenchExpanded = false;
 			if (!currentSessionId) {
 				currentSessionId = crypto.randomUUID();
@@ -1600,6 +1671,7 @@ const sendAndProcessA2ui = async (message: any) => {
 		a2uiError = err instanceof Error ? err.message : String(err);
 		updateAiNativeStage("blocked");
 		a2uiRequesting = false;
+		aiNativeWorkbenchExpanded = true;
 		renderApp();
 	}
 };
@@ -1775,10 +1847,11 @@ Feel free to use these tools when needed to provide accurate and helpful respons
 					if (agent.state.errorMessage) {
 						a2uiError = agent.state.errorMessage;
 						updateAiNativeStage("blocked");
+						aiNativeWorkbenchExpanded = true;
 					} else if (!a2uiError && a2uiMessages.length === 0 && a2uiRawText.length > 0) {
-						a2uiError =
-							"LLM 返回了内容但未包含有效的 A2UI JSON。请展开下方「Raw LLM Output Stream」查看原始输出。";
+						a2uiError = "LLM 返回了内容但未包含有效的 A2UI JSON。请展开任务中枢诊断查看原始模型输出。";
 						updateAiNativeStage("blocked");
+						aiNativeWorkbenchExpanded = true;
 					} else {
 						updateAiNativeStage("ready");
 					}
@@ -1792,6 +1865,7 @@ Feel free to use these tools when needed to provide accurate and helpful respons
 				a2uiError = err instanceof Error ? err.message : String(err);
 				updateAiNativeStage("blocked");
 				a2uiRequesting = false;
+				aiNativeWorkbenchExpanded = true;
 				renderApp();
 			}
 		}
@@ -1905,6 +1979,7 @@ const renderAiNativeWorkbench = (showForm: boolean) => {
 		trace: aiNativeToolTrace,
 		hasA2uiMessages: a2uiMessages.length > 0,
 		hasSurface: a2uiSurfaces.length > 0,
+		nextActionCount: aiNativeBusinessContext?.nextActions.length ?? 0,
 		isRequesting: a2uiRequesting,
 		hasError: Boolean(a2uiError),
 	});
@@ -1916,6 +1991,8 @@ const renderAiNativeWorkbench = (showForm: boolean) => {
 	const compactStageIcon = getAiNativeStageIcon(taskProfile.stage);
 	const compactStageLabel = getAiNativeStageLabel(taskProfile.stage);
 	const diagnosticCount = a2uiOutputDiagnostics.length;
+	const businessContext = aiNativeBusinessContext;
+	const showRawOutput = a2uiRawText.length > 0;
 
 	return html`
 		<section class="ai-native-workbench" aria-label="任务中枢">
@@ -1934,6 +2011,11 @@ const renderAiNativeWorkbench = (showForm: boolean) => {
 				<div class="ai-native-compact-badges">
 					<span class="ai-native-compact-badge">${taskProfile.risk}</span>
 					<span class="ai-native-compact-badge">${aiNativeToolTrace.length} 次工具</span>
+					${
+						businessContext
+							? html`<span class="ai-native-compact-badge">${businessContext.nextActions.length} 个推荐</span>`
+							: ""
+					}
 					<span class="ai-native-compact-badge ${governanceStatus.status}">${governanceStatus.label}</span>
 					${diagnosticCount > 0 ? html`<span class="ai-native-compact-badge warning">${diagnosticCount} 项诊断</span>` : ""}
 				</div>
@@ -1974,6 +2056,19 @@ const renderAiNativeWorkbench = (showForm: boolean) => {
 										${taskProfile.tools.map((item) => html`<span>${item}</span>`)}
 									</div>
 								</div>
+								${
+									businessContext
+										? html`
+											<div class="ai-native-cell">
+												<div class="ai-native-label">本体推断</div>
+												<div class="ai-native-value">${businessContext.primaryEntity} / ${businessContext.stage}</div>
+												<div class="ai-native-tags">
+													${businessContext.statusSignals.map((item) => html`<span>${item}</span>`)}
+												</div>
+											</div>
+										`
+										: ""
+								}
 							</div>
 
 							<ol class="ai-native-steps">
@@ -1998,13 +2093,15 @@ const renderAiNativeWorkbench = (showForm: boolean) => {
 													<div class="ai-native-trace-item ${trace.status}">
 														<div class="ai-native-trace-status">
 															<span class="material-symbols-outlined">
-																${trace.status === "running"
-																	? "progress_activity"
-																	: trace.status === "success"
-																		? "check"
-																		: trace.status === "waiting"
-																			? "pending_actions"
-																			: "error"}
+																${
+																	trace.status === "running"
+																		? "progress_activity"
+																		: trace.status === "success"
+																			? "check"
+																			: trace.status === "waiting"
+																				? "pending_actions"
+																				: "error"
+																}
 															</span>
 															<span>${traceStatusLabels[trace.status]}</span>
 														</div>
@@ -2019,9 +2116,11 @@ const renderAiNativeWorkbench = (showForm: boolean) => {
 																${trace.statusCode ? html`<span>HTTP ${trace.statusCode}</span>` : ""}
 																${trace.durationMs !== undefined ? html`<span>${trace.durationMs}ms</span>` : ""}
 															</div>
-															${trace.summary
-																? html`<div class="ai-native-trace-summary">${trace.summary}</div>`
-																: ""}
+															${
+																trace.summary
+																	? html`<div class="ai-native-trace-summary">${trace.summary}</div>`
+																	: ""
+															}
 															${trace.error ? html`<div class="ai-native-trace-error">${trace.error}</div>` : ""}
 														</div>
 													</div>
@@ -2065,11 +2164,13 @@ const renderAiNativeWorkbench = (showForm: boolean) => {
 														(diagnostic) => html`
 															<div class="ai-native-quality-item ${diagnostic.severity}">
 																<span class="ai-native-quality-severity">
-																	${diagnostic.severity === "error"
-																		? "错误"
-																		: diagnostic.severity === "warning"
-																			? "警告"
-																			: "信息"}
+																	${
+																		diagnostic.severity === "error"
+																			? "错误"
+																			: diagnostic.severity === "warning"
+																				? "警告"
+																				: "信息"
+																	}
 																</span>
 																<div class="ai-native-quality-copy">
 																	<div class="ai-native-quality-label">
@@ -2126,6 +2227,18 @@ const renderAiNativeWorkbench = (showForm: boolean) => {
 										)}
 									</div>
 								</div>
+								${
+									showRawOutput
+										? html`
+											<div class="raw-output-panel ai-native-raw-output">
+												<details ?open=${a2uiMessages.length === 0}>
+													<summary>原始模型输出</summary>
+													<pre class="raw-code"><code>${a2uiRawText}</code></pre>
+												</details>
+											</div>
+										`
+										: ""
+								}
 							</div>
 						</div>
 					`
@@ -2135,9 +2248,99 @@ const renderAiNativeWorkbench = (showForm: boolean) => {
 	`;
 };
 
+const getBusinessActionRiskLabel = (risk: BusinessOntologyAction["risk"]): string => {
+	const labels: Record<BusinessOntologyAction["risk"], string> = {
+		read: "只读",
+		write: "需确认",
+		destructive: "高风险",
+	};
+	return labels[risk];
+};
+
+const HOMEPAGE_ONTOLOGY_PROMPTS = createHomepageOntologyPrompts();
+
+const renderHomepageOntologyPrompts = () => {
+	return html`
+		<div class="homepage-ontology">
+			<div class="homepage-ontology-header">
+				<div>
+					<div class="ai-native-eyebrow">本体任务入口</div>
+					<div class="homepage-ontology-title">按工程档案生命周期开始</div>
+				</div>
+				<div class="homepage-ontology-note">Project → Document → Review → Signing → Precheck → Archive</div>
+			</div>
+			<div class="homepage-ontology-grid">
+				${HOMEPAGE_ONTOLOGY_PROMPTS.map(
+					(prompt) => html`
+						<button
+							type="button"
+							class="homepage-ontology-card ${prompt.risk}"
+							@click=${() => {
+								sendAndProcessA2ui(prompt.prompt);
+							}}
+						>
+							<div class="homepage-ontology-card-header">
+								<span>${prompt.entityLabel}</span>
+								<span>${getBusinessActionRiskLabel(prompt.risk)}</span>
+							</div>
+							<div class="homepage-ontology-card-title">${prompt.label}</div>
+							<div class="homepage-ontology-card-desc">${prompt.description}</div>
+							<div class="homepage-ontology-card-op">${prompt.operationId ?? "ontology"}</div>
+						</button>
+					`,
+				)}
+			</div>
+		</div>
+	`;
+};
+
+const renderAiNativeNextActions = (showForm: boolean) => {
+	if (showForm || !aiNativeTaskProfile || !aiNativeBusinessContext) return "";
+	const context = aiNativeBusinessContext;
+	const primarySignal = context.blockers[0] ?? context.statusSignals[0] ?? "根据本体关系预测后续动作";
+
+	return html`
+		<section class="ai-native-next-actions" aria-label="推荐下一步">
+			<div class="ai-native-next-header">
+				<div>
+					<div class="ai-native-eyebrow">推荐下一步</div>
+					<div class="ai-native-next-title">
+						${context.primaryEntity} · ${context.stage}
+					</div>
+				</div>
+				<div class="ai-native-next-signal">${primarySignal}</div>
+			</div>
+			<div class="ai-native-next-list">
+				${context.nextActions.map(
+					(action) => html`
+						<button
+							type="button"
+							class="ai-native-next-action ${action.risk}"
+							?disabled=${a2uiRequesting}
+							@click=${() => {
+								sendAndProcessA2ui(action.prompt);
+							}}
+						>
+							<div class="ai-native-next-action-main">
+								<div class="ai-native-next-action-title">${action.label}</div>
+								<div class="ai-native-next-action-reason">${action.reason}</div>
+							</div>
+							<div class="ai-native-next-action-meta">
+								<span>${getBusinessActionRiskLabel(action.risk)}</span>
+								${action.operationId ? html`<span>${action.operationId}</span>` : ""}
+							</div>
+						</button>
+					`,
+				)}
+			</div>
+		</section>
+	`;
+};
+
 const renderA2uiContent = () => {
 	const hasSurfaces = a2uiSurfaces.length > 0;
 	const showForm = !a2uiRequesting && a2uiMessages.length === 0;
+	refreshAiNativeBusinessContext();
 
 	return html`
 		<div class="flex-1 flex flex-col overflow-hidden relative">
@@ -2194,27 +2397,14 @@ const renderA2uiContent = () => {
 									</button>
 								</div>
 
-								<div class="quick-prompts">
-									${ARCHIVE_QUICK_PROMPTS.map(
-										(prompt) => html`
-											<button
-												type="button"
-												class="quick-prompt"
-												@click=${() => {
-													sendAndProcessA2ui(prompt);
-												}}
-											>
-												${prompt}
-											</button>
-										`,
-									)}
-								</div>
+								${renderHomepageOntologyPrompts()}
 							</form>
 						`
 							: ""
 					}
 
 					${renderAiNativeWorkbench(showForm)}
+					${renderAiNativeNextActions(showForm)}
 
 					<!-- Loading State -->
 					${
@@ -2230,20 +2420,6 @@ const renderA2uiContent = () => {
 
 					<!-- Error State -->
 					${a2uiError ? html`<div class="error">${a2uiError}</div>` : ""}
-
-					<!-- Raw Output Panel -->
-					${
-						a2uiRawText
-							? html`
-						<div class="raw-output-panel">
-							<details ?open=${!hasSurfaces}>
-								<summary>Raw LLM Output Stream</summary>
-								<pre class="raw-code"><code>${a2uiRawText}</code></pre>
-							</details>
-						</div>
-					`
-							: ""
-					}
 
 					<!-- Surfaces rendering -->
 					${
