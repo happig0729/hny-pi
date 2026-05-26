@@ -178,7 +178,7 @@ To call an endpoint, provide the operationId (shown in the domain list above) an
 			const headers: Record<string, string> = {
 				"Content-Type": "application/json",
 			};
-			if (tool.authToken && endpoint.tag !== "auth") {
+			if (tool.authToken && !["login", "register", "refreshToken"].includes(args.operationId)) {
 				headers.Authorization = `Bearer ${tool.authToken}`;
 			}
 

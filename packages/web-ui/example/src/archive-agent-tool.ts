@@ -252,7 +252,7 @@ async function callOperation(
 	}
 
 	const token = options.getAuthToken();
-	if (token && operation.tag !== "auth") {
+	if (token && !["login", "register", "refreshToken"].includes(operation.operationId)) {
 		headers.Authorization = `Bearer ${token}`;
 	}
 
